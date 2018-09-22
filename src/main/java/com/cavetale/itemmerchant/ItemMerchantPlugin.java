@@ -312,6 +312,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         double price = getSellingPrice(context.inventory);
         if (price >= 0.01) {
             GenericEvents.givePlayerMoney(playerId, price, this, "Items sold");
+            player.sendMessage(ChatColor.GREEN + "Sold for " + GenericEvents.formatMoney(price) + ".");
         } else {
             for (ItemStack item: context.inventory) {
                 if (item == null || item.getType() == Material.AIR) continue;
