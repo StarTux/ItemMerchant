@@ -38,15 +38,19 @@ import org.bukkit.plugin.java.annotation.plugin.author.Author;
 @Plugin(name = "ItemMerchant", version = "0.1")
 @Dependency("GenericEvents")
 @Dependency("SQL")
-@Description("Sell or buy items to or from virtual merchants");
+@Description("Sell or buy items to or from virtual merchants")
 @ApiVersion(ApiVersion.Target.v1_13)
 @Author("StarTux")
 @Website("https://cavetale.com")
 @Commands(@Command(name = "itemmerchant",
                    desc = "Admin interface",
-                   aliases = {},
+                   aliases = {"im"},
                    permission = "itemmerchant.itemmerchant",
-                   usage = "/<command>"))
+                   usage = "USAGE"
+                   + "\n/im sell [player] - Open selling inventory"
+                   + "\n/im buy [player] <category> - Open buying inventory"
+                   + "\n/im setprice <amount> [capacity] - Set price of hand"
+                   + "\n/im info - Get info on item in hand"))
 @Permissions(@Permission(name = "itemmerchant.itemmerchant",
                          desc = "Use /itemmerchant",
                          defaultValue = PermissionDefault.OP))
@@ -64,11 +68,12 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private double capacityFactor = 0.25;
     private double randomFactor = 0.25;
     private SQLDatabase database;
+    private static final int DEFAULT_CAPACITY = 1000;
 
     // Plugin Overrides
 
     @RequiredArgsConstructor
-    final static class InventoryContext {
+    static final class InventoryContext {
         private final Inventory inventory;
         private final InventoryView view;
         private final double price;
@@ -101,8 +106,109 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
-        openSellInventory((Player)sender, ChatColor.BLUE + "Sell me Items", 4 * 9);
-        return true;
+        Player player = sender instanceof Player ? (Player)sender : null;
+        Player target; // Targeted by command, where it applies
+        ItemStack item; // Item in hand, where it applies
+        if (args.length == 0) return false;
+        switch (args[0]) {
+        case "sell":
+            if (args.length == 1 || args.length == 2) {
+                // Find target
+                if (args.length >= 2) {
+                    String name = args[1];
+                    target = getServer().getPlayerExact(name);
+                    if (target == null) {
+                        sender.sendMessage("Player not found: " + name);
+                        return true;
+                    }
+                } else {
+                    if (player == null) {
+                        sender.sendMessage("Player expected");
+                        return true;
+                    }
+                    target = player;
+                }
+                openSellInventory(target, ChatColor.BLUE + "Sell me Items", 4 * 9);
+                sender.sendMessage("Opened selling inventory for " + target.getName());
+                return true;
+            }
+            break;
+        case "buy":
+            if (args.length == 2 || args.length == 3) {
+                int argi = 1;
+                if (args.length >= 3) {
+                    String name = args[argi++];
+                    target = getServer().getPlayerExact(name);
+                    if (target == null) {
+                        sender.sendMessage("Player not found: " + name);
+                        return true;
+                    }
+                } else {
+                    target = player;
+                }
+                String shopName = args[argi++];
+                // TODO: find and open buy shop
+                return true;
+            }
+            break;
+        case "setprice":
+            if (player == null) {
+                sender.sendMessage("Player expected.");
+                return true;
+            }
+            if (args.length == 2 || args.length == 3) {
+                item = player.getInventory().getItemInMainHand();
+                if (item == null || item.getType() == Material.AIR) {
+                    player.sendMessage(ChatColor.RED + "No item in hand.");
+                    return true;
+                }
+                double price;
+                try {
+                    price = Double.parseDouble(args[1]);
+                } catch (NumberFormatException nfe) {
+                    player.sendMessage(ChatColor.RED + "Invalid price: " + args[1]);
+                    return true;
+                }
+                int capacity = DEFAULT_CAPACITY;
+                if (args.length >= 3) {
+                    try {
+                        capacity = Integer.parseInt(args[2]);
+                    } catch (NumberFormatException nfe) {
+                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + args[2]);
+                        return true;
+                    }
+                    if (capacity <= 0) {
+                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + capacity);
+                        return true;
+                    }
+                }
+                SQLItem row = itemPrices.get(item.getType());
+                if (row != null) {
+                    row.setPrice(price);
+                    row.setCapacity(capacity);
+                    database.save(row, "price", "capacity");
+                } else {
+                    row = new SQLItem(item.getType(), price, capacity);
+                    database.save(row);
+                    itemPrices.put(item.getType(), row);
+                }
+                player.sendMessage("Set price of " + item.getType().name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + " (capacity " + capacity + ")");
+                return true;
+            }
+            break;
+        case "info":
+            if (player == null) {
+                sender.sendMessage("Player expected.");
+                return true;
+            }
+            if (args.length == 1) {
+                return true;
+            }
+            break;
+        default:
+            break;
+        }
+        return false;
     }
 
     // IO
