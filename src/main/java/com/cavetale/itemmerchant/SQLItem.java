@@ -25,7 +25,7 @@ public final class SQLItem {
     @Column(nullable = false) private Double price;
     @Version private Date version;
 
-    SQLItem() { }
+    public SQLItem() { }
 
     SQLItem(Material mat, double bp, int cap) {
         this.material = mat.name().toLowerCase();
