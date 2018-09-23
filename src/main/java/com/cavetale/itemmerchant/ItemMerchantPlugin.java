@@ -154,10 +154,10 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             break;
         case "setprice":
             int argi = 0;
-            if (args.length >= 2 && args.length <= 4) {
+            if (args.length >= 2 && args.length <= 3) {
                 Material mat;
                 String arg;
-                if (args.length >= 4) {
+                if (args.length >= 3) {
                     arg = args[argi++];
                     try {
                         mat = Material.valueOf(arg);
@@ -185,31 +185,16 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     player.sendMessage(ChatColor.RED + "Invalid price: " + arg);
                     return true;
                 }
-                int capacity = DEFAULT_CAPACITY;
-                if (args.length > argi) {
-                    arg = args[argi++];
-                    try {
-                        capacity = Integer.parseInt(arg);
-                    } catch (NumberFormatException nfe) {
-                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + arg);
-                        return true;
-                    }
-                    if (capacity <= 0) {
-                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + capacity);
-                        return true;
-                    }
-                }
                 SQLItem row = itemPrices.get(mat);
                 if (row != null) {
                     row.setPrice(price);
-                    row.setCapacity(capacity);
-                    database.save(row, "price", "capacity");
+                    database.save(row, "price");
                 } else {
-                    row = new SQLItem(mat, price, capacity);
+                    row = new SQLItem(mat, price, DEFAULT_CAPACITY);
                     database.save(row);
                     itemPrices.put(mat, row);
                 }
-                player.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + " (capacity " + capacity + ")");
+                player.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + ".");
                 return true;
             }
             break;
