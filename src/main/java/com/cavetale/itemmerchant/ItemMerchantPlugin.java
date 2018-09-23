@@ -54,6 +54,7 @@ import org.bukkit.plugin.java.annotation.plugin.author.Author;
                    + "\n/im setprice [item] <amount> [capacity] - Set price of item"
                    + "\n/im info [item] - Get info on item"
                    + "\n/im list - List item prices"
+                   + "\n/im reload - Reload configurations"
                    + "\n/im update - Update all item prices"))
 @Permissions(@Permission(name = "itemmerchant.itemmerchant",
                          desc = "Use /itemmerchant",
@@ -87,16 +88,22 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
-        getServer().getPluginManager().registerEvents(this, this);
-        baseFactor = getConfig().getDouble("price.Base", 0.5);
-        capacityFactor = getConfig().getDouble("price.Capacity", 0.25);
-        randomFactor = getConfig().getDouble("price.Random", 0.25);
+        saveDefaultConfig();
+        importConfig();
         database = new SQLDatabase(this);
         database.registerTable(SQLItem.class);
         database.createAllTables();
         loadItemPrices();
         long delay = 20 * 60 * 10;
         getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(), delay, delay);
+        getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    void importConfig() {
+        reloadConfig();
+        baseFactor = getConfig().getDouble("price.Base", 0.5);
+        capacityFactor = getConfig().getDouble("price.Capacity", 0.25);
+        randomFactor = getConfig().getDouble("price.Random", 0.25);
     }
 
     @Override
@@ -258,6 +265,13 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             if (args.length == 1) {
                 updateItemPrices();
                 sender.sendMessage("Item prices updated");
+                return true;
+            }
+            break;
+        case "reload":
+            if (args.length == 1) {
+                importConfig();
+                sender.sendMessage("Configuration reloaded.");
                 return true;
             }
             break;
