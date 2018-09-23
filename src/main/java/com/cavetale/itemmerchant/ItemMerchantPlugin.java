@@ -250,12 +250,14 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 for (SQLItem row: itemPrices.values()) {
                     sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getStorage(), row.getPrice()));
                 }
+                return true;
             }
             break;
         case "update":
             if (args.length == 1) {
                 updateItemPrices();
                 sender.sendMessage("Item prices updated");
+                return true;
             }
             break;
         default:
