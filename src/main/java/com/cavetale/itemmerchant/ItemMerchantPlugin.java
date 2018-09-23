@@ -153,7 +153,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             }
             break;
         case "setprice":
-            int argi = 0;
+            int argi = 1;
             if (args.length >= 2 && args.length <= 3) {
                 Material mat;
                 String arg;
