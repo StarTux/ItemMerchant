@@ -205,6 +205,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     if (!mat.isItem() || itemPrices.containsKey(mat)) continue;
                     SQLItem row = new SQLItem(mat, 0.10, DEFAULT_CAPACITY);
                     database.save(row);
+                    itemPrices.put(mat, row);
                     count += 1;
                 }
                 sender.sendMessage(count + " Items inserted");
