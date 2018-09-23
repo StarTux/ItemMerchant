@@ -49,8 +49,10 @@ import org.bukkit.plugin.java.annotation.plugin.author.Author;
                    usage = "USAGE"
                    + "\n/im sell [player] - Open selling inventory"
                    + "\n/im buy [player] <category> - Open buying inventory"
-                   + "\n/im setprice <amount> [capacity] - Set price of hand"
-                   + "\n/im info - Get info on item in hand"))
+                   + "\n/im setprice [item] <amount> [capacity] - Set price of item"
+                   + "\n/im info [item] - Get info on item"
+                   + "\n/im list - List item prices"
+                   + "\n/im update - Update all item prices"))
 @Permissions(@Permission(name = "itemmerchant.itemmerchant",
                          desc = "Use /itemmerchant",
                          defaultValue = PermissionDefault.OP))
@@ -108,7 +110,6 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     public boolean onCommand(CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
         Player player = sender instanceof Player ? (Player)sender : null;
         Player target; // Targeted by command, where it applies
-        ItemStack item; // Item in hand, where it applies
         if (args.length == 0) return false;
         switch (args[0]) {
         case "sell":
@@ -152,29 +153,45 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             }
             break;
         case "setprice":
-            if (player == null) {
-                sender.sendMessage("Player expected.");
-                return true;
-            }
-            if (args.length == 2 || args.length == 3) {
-                item = player.getInventory().getItemInMainHand();
-                if (item == null || item.getType() == Material.AIR) {
-                    player.sendMessage(ChatColor.RED + "No item in hand.");
-                    return true;
+            int argi = 0;
+            if (args.length >= 2 && args.length <= 4) {
+                Material mat;
+                String arg;
+                if (args.length >= 4) {
+                    arg = args[argi++];
+                    try {
+                        mat = Material.valueOf(arg);
+                    } catch (IllegalArgumentException iae) {
+                        sender.sendMessage(ChatColor.RED + "Unknown item type: " + arg);
+                        return true;
+                    }
+                } else {
+                    if (player == null) {
+                        sender.sendMessage("Player expected.");
+                        return true;
+                    }
+                    ItemStack item = player.getInventory().getItemInMainHand();
+                    if (item == null || item.getType() == Material.AIR) {
+                        player.sendMessage(ChatColor.RED + "No item in hand.");
+                        return true;
+                    }
+                    mat = item.getType();
                 }
                 double price;
+                arg = args[argi++];
                 try {
-                    price = Double.parseDouble(args[1]);
+                    price = Double.parseDouble(arg);
                 } catch (NumberFormatException nfe) {
-                    player.sendMessage(ChatColor.RED + "Invalid price: " + args[1]);
+                    player.sendMessage(ChatColor.RED + "Invalid price: " + arg);
                     return true;
                 }
                 int capacity = DEFAULT_CAPACITY;
-                if (args.length >= 3) {
+                if (args.length > argi) {
+                    arg = args[argi++];
                     try {
-                        capacity = Integer.parseInt(args[2]);
+                        capacity = Integer.parseInt(arg);
                     } catch (NumberFormatException nfe) {
-                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + args[2]);
+                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + arg);
                         return true;
                     }
                     if (capacity <= 0) {
@@ -182,27 +199,62 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                         return true;
                     }
                 }
-                SQLItem row = itemPrices.get(item.getType());
+                SQLItem row = itemPrices.get(mat);
                 if (row != null) {
                     row.setPrice(price);
                     row.setCapacity(capacity);
                     database.save(row, "price", "capacity");
                 } else {
-                    row = new SQLItem(item.getType(), price, capacity);
+                    row = new SQLItem(mat, price, capacity);
                     database.save(row);
-                    itemPrices.put(item.getType(), row);
+                    itemPrices.put(mat, row);
                 }
-                player.sendMessage("Set price of " + item.getType().name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + " (capacity " + capacity + ")");
+                player.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + " (capacity " + capacity + ")");
                 return true;
             }
             break;
         case "info":
-            if (player == null) {
-                sender.sendMessage("Player expected.");
+            if (args.length == 1 || args.length == 2) {
+                Material mat;
+                if (args.length == 1) {
+                    if (player == null) {
+                        sender.sendMessage("Player expected.");
+                        return true;
+                    }
+                    ItemStack item = player.getInventory().getItemInMainHand();
+                    if (item == null || item.getType() == Material.AIR) {
+                        player.sendMessage(ChatColor.RED + "No item in hand.");
+                        return true;
+                    }
+                    mat = item.getType();
+                } else {
+                    try {
+                        mat = Material.valueOf(args[1].toUpperCase());
+                    } catch (IllegalArgumentException iae) {
+                        sender.sendMessage(ChatColor.RED + "Unknown item: " + args[1]);
+                        return true;
+                    }
+                }
+                SQLItem row = itemPrices.get(mat);
+                if (row == null) {
+                    sender.sendMessage(ChatColor.RED + "No entry for " + mat);
+                    return true;
+                }
+                sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getPrice()));
                 return true;
             }
+            break;
+        case "list":
             if (args.length == 1) {
-                return true;
+                sender.sendMessage("" + ChatColor.YELLOW + itemPrices.size() + " Items:");
+                for (SQLItem row: itemPrices.values()) {
+                    sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getPrice()));
+                }
+            }
+        case "update":
+            if (args.length == 1) {
+                updateItemPrices();
+                sender.sendMessage("Item prices updated");
             }
             break;
         default:
