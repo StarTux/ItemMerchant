@@ -160,7 +160,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 if (args.length >= 3) {
                     arg = args[argi++];
                     try {
-                        mat = Material.valueOf(arg);
+                        mat = Material.valueOf(arg.toUpperCase());
                     } catch (IllegalArgumentException iae) {
                         sender.sendMessage(ChatColor.RED + "Unknown item type: " + arg);
                         return true;
