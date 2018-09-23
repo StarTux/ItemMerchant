@@ -196,7 +196,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 }
                 SQLItem row = itemPrices.get(mat);
                 if (row != null) {
-                    row.setPrice(price);
+                    row.setBasePrice(price);
                     database.save(row, "price");
                 } else {
                     row = new SQLItem(mat, price, DEFAULT_CAPACITY);
