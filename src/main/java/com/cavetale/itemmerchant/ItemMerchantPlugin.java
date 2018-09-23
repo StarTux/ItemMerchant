@@ -203,7 +203,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     database.save(row);
                     itemPrices.put(mat, row);
                 }
-                player.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + ".");
+                sender.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + ".");
                 return true;
             }
             break;
