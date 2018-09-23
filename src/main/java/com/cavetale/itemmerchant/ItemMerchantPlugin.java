@@ -4,8 +4,10 @@ import com.winthier.generic_events.GenericEvents;
 import com.winthier.sql.SQLDatabase;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
@@ -361,9 +363,32 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         if (context.closedByPlugin) return;
         // Logic starts here
         double price = getSellingPrice(context.inventory);
+        int total = 0;
         if (price >= 0.01) {
-            GenericEvents.givePlayerMoney(playerId, price, this, "Items sold");
-            player.sendMessage(ChatColor.GREEN + "Sold for " + GenericEvents.formatMoney(price) + ".");
+            Set<SQLItem> dirty = new HashSet<>();
+            Map<Material, Integer> totals = new HashMap<>();
+            for (ItemStack item: context.inventory) {
+                if (item == null || item.getType() == Material.AIR) continue;
+                Material mat = item.getType();
+                SQLItem row = itemPrices.get(mat);
+                if (row == null) continue; // Should never happen
+                dirty.add(row);
+                row.setStorage(row.getStorage() + item.getAmount());
+                total += item.getAmount();
+                Integer amount = totals.get(mat);
+                if (amount == null) amount = 0;
+                amount += item.getAmount();
+                totals.put(mat, amount);
+            }
+            for (SQLItem d: dirty) database.save(dirty);
+            GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
+            player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
+            StringBuilder sb = new StringBuilder(player.getName()).append(" sold");
+            for (Map.Entry<Material, Integer> entry: totals.entrySet()) {
+                sb.append(" ").append(entry.getValue()).append("x").append(entry.getKey().name().toLowerCase());
+            }
+            sb.append(" for ").append(GenericEvents.formatMoney(price)).append(".");
+            getLogger().info(sb.toString());
         } else {
             for (ItemStack item: context.inventory) {
                 if (item == null || item.getType() == Material.AIR) continue;
