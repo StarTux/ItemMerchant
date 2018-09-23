@@ -236,10 +236,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             double price = calculateItemPrice(item, time);
             item.setPrice(price);
         }
-        final SQLDatabase db = database.async();
-        getServer().getScheduler().runTaskAsynchronously(this, () -> {
-                for (SQLItem item: items) db.save(item, "price");
-            });
+        for (SQLItem item: items) database.save(item, "price");
     }
 
     // Utility
