@@ -240,7 +240,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     sender.sendMessage(ChatColor.RED + "No entry for " + mat);
                     return true;
                 }
-                sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getPrice()));
+                sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getStorage(), row.getPrice()));
                 return true;
             }
             break;
@@ -248,7 +248,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             if (args.length == 1) {
                 sender.sendMessage("" + ChatColor.YELLOW + itemPrices.size() + " Items:");
                 for (SQLItem row: itemPrices.values()) {
-                    sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getPrice()));
+                    sender.sendMessage(ChatColor.YELLOW + String.format("base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getStorage(), row.getPrice()));
                 }
             }
         case "update":
