@@ -198,6 +198,19 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 return true;
             }
             break;
+        case "fill":
+            if (args.length == 1) {
+                int count = 0;
+                for (Material mat: Material.values()) {
+                    if (!mat.isItem() || itemPrices.containsKey(mat)) continue;
+                    SQLItem row = new SQLItem(mat, 0.10, DEFAULT_CAPACITY);
+                    database.save(row);
+                    count += 1;
+                }
+                sender.sendMessage(count + " Items inserted");
+                return true;
+            }
+            break;
         case "info":
             if (args.length == 1 || args.length == 2) {
                 Material mat;
