@@ -69,11 +69,13 @@ import org.bukkit.plugin.java.annotation.plugin.author.Author;
 public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, InventoryContext> openInventories = new HashMap<>();
     private final Map<Material, SQLItem> itemPrices = new HashMap<>();
-    private double baseFactor = 0.5;
-    private double capacityFactor = 0.25;
-    private double randomFactor = 0.25;
+    private double baseFactor;
+    private double capacityFactor;
+    private double randomFactor;
     private SQLDatabase database;
     private static final int DEFAULT_CAPACITY = 1000;
+    private double dbgRND, dbgCAP, dbgTIME;
+    private double lastUpdateTime;
 
     // Plugin Overrides
 
@@ -94,16 +96,15 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         database.registerTable(SQLItem.class);
         database.createAllTables();
         loadItemPrices();
-        long delay = 20 * 60 * 10;
-        getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(), delay, delay);
+        getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(), 200, 200);
         getServer().getPluginManager().registerEvents(this, this);
     }
 
     void importConfig() {
         reloadConfig();
-        baseFactor = getConfig().getDouble("price.Base", 0.5);
-        capacityFactor = getConfig().getDouble("price.Capacity", 0.25);
-        randomFactor = getConfig().getDouble("price.Random", 0.25);
+        baseFactor = getConfig().getDouble("price.Base");
+        capacityFactor = getConfig().getDouble("price.Capacity");
+        randomFactor = getConfig().getDouble("price.Random");
     }
 
     @Override
@@ -248,7 +249,12 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     sender.sendMessage(ChatColor.RED + "No entry for " + mat);
                     return true;
                 }
-                sender.sendMessage(ChatColor.YELLOW + String.format("%s base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getMaterial(), row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getStorage(), row.getPrice()));
+                double base = row.getBasePrice();
+                sender.sendMessage(row.getMaterial() + " §7price§8=§e" + fmt(row.getPrice()) + "§8/§6" + fmt(base) + " §7store§8=§e" + fmt(row.getStorage()) + "§8/§6" + fmt(row.getCapacity()) + " §7off§8=§e" + fmt(row.getTimeOffset()));
+                calculateItemPrice(row, dbgTIME);
+                sender.sendMessage("§ccap§4=§f" + fmt(dbgCAP) + "§8*§f" + fmt(capacityFactor) + "§8=>§f" + fmt(dbgCAP * capacityFactor) + "§8*§f" + fmt(base) + "§8=>§f" + fmt(dbgCAP * capacityFactor * base));
+                sender.sendMessage("§crnd§4=§f" + fmt(dbgRND) + "§8*§f" + fmt(randomFactor) + "§8=>§f" + fmt(dbgRND * randomFactor) + "§8*§f" + fmt(base) + "§8=>§f" + fmt(dbgRND * randomFactor * base));
+                sender.sendMessage("§cfactor§8=§f" + fmt(baseFactor + capacityFactor * dbgCAP + randomFactor * dbgRND));
                 return true;
             }
             break;
@@ -263,6 +269,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             break;
         case "update":
             if (args.length == 1) {
+                lastUpdateTime = 0;
                 updateItemPrices();
                 sender.sendMessage("Item prices updated");
                 return true;
@@ -281,7 +288,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         return false;
     }
 
-    // IO
+    // --- IO
 
     /**
      * Replace the current cache with the contents of the database.
@@ -296,12 +303,12 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
 
     /**
      * Update all prices according to their base price, capacity, and
-     * the current time. Prices change twice a Minecraft day,
-     * i.e. every 10 minutes.
+     * the current time. Prices change every few minutes.
      */
     void updateItemPrices() {
+        double time = (double)(System.currentTimeMillis() / 1000L * 60L * 3L) * Math.PI / 10.0;
+        if (time == lastUpdateTime) return;
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
-        double time = (double)(System.currentTimeMillis() / 1000L * 60L * 10L) * Math.PI / 10.0;
         for (SQLItem item: items) {
             double price = calculateItemPrice(item, time);
             item.setPrice(price);
@@ -327,23 +334,26 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             if (item == null || item.getType() == Material.AIR) continue;
             double itemPrice = getSellingPrice(item);
             // Return false if a single item is invalid.
-            if (itemPrice < 0.01) return itemPrice;
+            if (itemPrice < 0) return itemPrice;
             result += itemPrice;
         }
         return result;
     }
 
-
     double calculateItemPrice(SQLItem row, double rtime) {
         final double time = rtime + row.getTimeOffset() * 2.0 * Math.PI;
-        double rnd = 0.75 * Math.sin(time) + 0.25 * Math.sin(8 * time);
+        double rnd = (0.75 * Math.sin(time) + 0.25 * Math.sin(8 * time)) * 0.5 + 0.5;
         double cap;
-        if (row.getStorage() == 0) {
-            cap = 2.0;
+        if (row.getStorage() == 0 || row.getStorage() <= row.getCapacity()) {
+            cap = 1.0;
         } else {
-            cap = Math.max(0.0, 2.0 - row.getStorage() / row.getCapacity());
+            cap = 1.0 / ((double)row.getStorage() / (double)row.getCapacity());
+            cap = Math.min(1.0, Math.max(0.0, cap));
         }
-        double price =  row.getBasePrice() * (baseFactor + capacityFactor * cap + randomFactor * rnd);
+        double price = row.getBasePrice() * (baseFactor + capacityFactor * cap + randomFactor * rnd);
+        this.dbgTIME = rtime;
+        this.dbgRND = rnd;
+        this.dbgCAP = cap;
         return price;
     }
 
@@ -378,7 +388,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         // Logic starts here
         double price = getSellingPrice(context.inventory);
         int total = 0;
-        if (price >= 0.01) {
+        if (price > 0) {
             Set<SQLItem> dirty = new HashSet<>();
             Map<Material, Integer> totals = new HashMap<>();
             for (ItemStack item: context.inventory) {
@@ -395,6 +405,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 totals.put(mat, amount);
             }
             for (SQLItem d: dirty) database.save(dirty);
+            lastUpdateTime = 0;
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
             StringBuilder sb = new StringBuilder(player.getName()).append(" sold");
@@ -450,7 +461,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         double price = getSellingPrice(context.inventory);
         if (Math.abs(context.price - price) < 0.01) return;
         String priceStr;
-        if (price < 0.01) {
+        if (price < 0) {
             priceStr = ChatColor.DARK_RED + "INVALID ITEM";
         } else {
             priceStr = ChatColor.DARK_GREEN + GenericEvents.formatMoney(price);
@@ -467,5 +478,9 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         InventoryView newView = player.openInventory(newInventory); // Implies Close
         InventoryContext newContext = new InventoryContext(newInventory, newView, price);
         openInventories.put(player.getUniqueId(), newContext);
+    }
+
+    String fmt(double num) {
+        return String.format("%.02f", num);
     }
 }
