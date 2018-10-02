@@ -75,7 +75,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private SQLDatabase database;
     private static final int DEFAULT_CAPACITY = 1000;
     private double dbgRND, dbgCAP, dbgTIME;
-    private double lastUpdateTime;
+    private long lastUpdateTime;
 
     // Plugin Overrides
 
@@ -305,8 +305,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
      * the current time. Prices change every few minutes.
      */
     void updateItemPrices(boolean force) {
-        // Every 3 minutes
-        final double time = (double)(System.currentTimeMillis() / 1000L * 60L * 3L) * Math.PI / 10.0;
+        // Every 10 minutes
+        final long time = System.currentTimeMillis() / (1000L * 60L * 5L);
         final boolean timeChanged = time != lastUpdateTime;
         lastUpdateTime = time;
         if (!timeChanged && !force) return;
@@ -317,7 +317,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         }
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
         for (SQLItem item: items) {
-            double price = calculateItemPrice(item, time);
+            double price = calculateItemPrice(item, (double)time * Math.PI / 10.0);
             item.setPrice(price);
             if (timeChanged) {
                 int storage = item.getStorage();
