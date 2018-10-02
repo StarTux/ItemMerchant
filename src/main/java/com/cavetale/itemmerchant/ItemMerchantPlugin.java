@@ -173,7 +173,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 if (arg.startsWith("*")) {
                     arg = arg.substring(1);
                     for (Material mat: Material.values()) {
-                        if (mat.name().startsWith(arg.toUpperCase())) {
+                        if (mat.name().endsWith(arg.toUpperCase())) {
                             mats.add(mat);
                         }
                     }
