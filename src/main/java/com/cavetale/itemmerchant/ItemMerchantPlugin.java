@@ -3,12 +3,14 @@ package com.cavetale.itemmerchant;
 import com.winthier.generic_events.GenericEvents;
 import com.winthier.sql.SQLDatabase;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -76,7 +78,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private static final int DEFAULT_CAPACITY = 1000;
     private double dbgRND, dbgCAP, dbgTIME;
     private static final long UPDATE_INTERVAL = 1000L * 60L * 5L;
-    private long lastUpdateTime = System.currentTimeMillis() / UPDATE_INTERVAL;
+    private long lastUpdateTime;
 
     // Plugin Overrides
 
@@ -99,6 +101,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         loadItemPrices();
         getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(false), 200, 200);
         getServer().getPluginManager().registerEvents(this, this);
+        lastUpdateTime = System.currentTimeMillis() / UPDATE_INTERVAL;
     }
 
     void importConfig() {
@@ -164,48 +167,56 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             }
             break;
         case "setprice":
-            int argi = 1;
-            if (args.length >= 2 && args.length <= 3) {
-                Material mat;
-                String arg;
-                if (args.length >= 3) {
-                    arg = args[argi++];
-                    try {
-                        mat = Material.valueOf(arg.toUpperCase());
-                    } catch (IllegalArgumentException iae) {
-                        sender.sendMessage(ChatColor.RED + "Unknown item type: " + arg);
-                        return true;
+            if (args.length >= 3 && args.length <= 4) {
+                List<Material> mats = new ArrayList<>();
+                String arg = args[1];
+                if (arg.startsWith("*")) {
+                    arg = arg.substring(1);
+                    for (Material mat: Material.values()) {
+                        if (mat.name().startsWith(arg.toUpperCase())) {
+                            mats.add(mat);
+                        }
                     }
                 } else {
-                    if (player == null) {
-                        sender.sendMessage("Player expected.");
-                        return true;
-                    }
-                    ItemStack item = player.getInventory().getItemInMainHand();
-                    if (item == null || item.getType() == Material.AIR) {
-                        player.sendMessage(ChatColor.RED + "No item in hand.");
-                        return true;
-                    }
-                    mat = item.getType();
+                    try {
+                        mats.add(Material.valueOf(arg.toUpperCase()));
+                    } catch (IllegalArgumentException iae) { }
+                }
+                if (mats.isEmpty()) {
+                    sender.sendMessage("No item matched " + arg);
+                    return true;
                 }
                 double price;
-                arg = args[argi++];
+                arg = args[2];
                 try {
                     price = Double.parseDouble(arg);
                 } catch (NumberFormatException nfe) {
                     player.sendMessage(ChatColor.RED + "Invalid price: " + arg);
                     return true;
                 }
-                SQLItem row = itemPrices.get(mat);
-                if (row != null) {
-                    row.setBasePrice(price);
-                    database.save(row, "price");
-                } else {
-                    row = new SQLItem(mat, price, DEFAULT_CAPACITY);
-                    database.save(row);
-                    itemPrices.put(mat, row);
+                int capacity = -1;
+                if (args.length >= 4) {
+                    arg = args[3];
+                    try {
+                        capacity = Integer.parseInt(arg);
+                    } catch (NumberFormatException nfe) {
+                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + arg);
+                        return true;
+                    }
                 }
-                sender.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + ".");
+                for (Material mat: mats) {
+                    SQLItem row = itemPrices.get(mat);
+                    if (row != null) {
+                        row.setBasePrice(price);
+                        if (capacity > 0) row.setCapacity(capacity);
+                        database.save(row, "price");
+                    } else {
+                        row = new SQLItem(mat, price, capacity > 0 ? capacity : DEFAULT_CAPACITY);
+                        database.save(row);
+                        itemPrices.put(mat, row);
+                    }
+                    sender.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + ", capacity=" + row.getCapacity() + ".");
+                }
                 return true;
             }
             break;
@@ -288,6 +299,18 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         return false;
     }
 
+    @Override
+    public List<String> onTabComplete(CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
+        if (args.length == 0) return null;
+        String cmd = args[0];
+        String arg = args[args.length - 1];
+        if ((cmd.equals("setprice") && args.length == 2)
+            || cmd.equals("info") && args.length == 2) {
+            return Arrays.stream(Material.values()).map(Material::name).filter(n -> n.startsWith(arg.toUpperCase())).collect(Collectors.toList());
+        }
+        return null;
+    }
+
     // --- IO
 
     /**
@@ -308,7 +331,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     void updateItemPrices(boolean force) {
         // Every 10 minutes
         final long time = System.currentTimeMillis() / UPDATE_INTERVAL;
-        final boolean timeChanged = time != lastUpdateTime;
+        final boolean timeChanged = (time != lastUpdateTime);
         lastUpdateTime = time;
         if (!timeChanged && !force) return;
         if (timeChanged) {
@@ -421,7 +444,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 amount += item.getAmount();
                 totals.put(mat, amount);
             }
-            for (SQLItem d: dirty) database.save(dirty);
+            for (SQLItem d: dirty) database.save(d, "storage");
             lastUpdateTime = 0;
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
