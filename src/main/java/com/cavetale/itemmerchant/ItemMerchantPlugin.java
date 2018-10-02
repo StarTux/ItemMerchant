@@ -306,14 +306,22 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
      * the current time. Prices change every few minutes.
      */
     void updateItemPrices() {
+        // Every 3 minutes
         double time = (double)(System.currentTimeMillis() / 1000L * 60L * 3L) * Math.PI / 10.0;
         if (time == lastUpdateTime) return;
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
         for (SQLItem item: items) {
             double price = calculateItemPrice(item, time);
+            int storage = item.getStorage();
+            int capacity = item.getCapacity();
+            if (storage > capacity) {
+                storage -= (int)(Math.random() * 0.1 * (double)capacity);
+                if (storage < 0) storage = 0;
+                item.setStorage(storage);
+            }
             item.setPrice(price);
         }
-        for (SQLItem item: items) database.save(item, "price");
+        for (SQLItem item: items) database.save(item, "price", "storage");
     }
 
     // Utility
@@ -404,7 +412,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 amount += item.getAmount();
                 totals.put(mat, amount);
             }
-            for (SQLItem d: dirty) database.save(dirty);
+            for (SQLItem d: dirty) database.save(dirty, "storage");
             lastUpdateTime = 0;
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
