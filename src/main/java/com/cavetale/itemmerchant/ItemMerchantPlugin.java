@@ -74,10 +74,11 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private double baseFactor;
     private double capacityFactor;
     private double randomFactor;
+    private double recoveryFactor = 0.01;
+    private long updateInterval = 1000L * 60L * 5L;
     private SQLDatabase database;
     private static final int DEFAULT_CAPACITY = 1000;
     private double dbgRND, dbgCAP, dbgTIME;
-    private static final long UPDATE_INTERVAL = 1000L * 60L * 5L;
     private long lastUpdateTime;
 
     // Plugin Overrides
@@ -101,7 +102,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         loadItemPrices();
         getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(false), 200, 200);
         getServer().getPluginManager().registerEvents(this, this);
-        lastUpdateTime = System.currentTimeMillis() / UPDATE_INTERVAL;
+        lastUpdateTime = System.currentTimeMillis() / updateInterval;
     }
 
     void importConfig() {
@@ -109,6 +110,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         baseFactor = getConfig().getDouble("price.Base");
         capacityFactor = getConfig().getDouble("price.Capacity");
         randomFactor = getConfig().getDouble("price.Random");
+        recoveryFactor = getConfig().getDouble("RecoveryFactor");
+        updateInterval = Math.max(1L, getConfig().getLong("UpdateInterval")) * 1000L * 60L;
     }
 
     @Override
@@ -330,7 +333,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
      */
     void updateItemPrices(boolean force) {
         // Every 10 minutes
-        final long time = System.currentTimeMillis() / UPDATE_INTERVAL;
+        final long time = System.currentTimeMillis() / updateInterval;
         final boolean timeChanged = (time != lastUpdateTime);
         lastUpdateTime = time;
         if (!timeChanged && !force) return;
@@ -347,7 +350,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 int storage = item.getStorage();
                 int capacity = item.getCapacity();
                 if (storage > capacity) {
-                    storage -= (int)(Math.random() * 0.1 * (double)capacity);
+                    storage -= (int)(Math.random() * recoveryFactor * (double)capacity);
                     if (storage < 0) storage = 0;
                     item.setStorage(storage);
                 }

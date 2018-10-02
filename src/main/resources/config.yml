@@ -2,3 +2,5 @@ price:
   Base: 0.5
   Capacity: 0.25
   Random: 0.25
+RecoveryFactor: 0.01
+UpdateInterval: 5 # In minutes
