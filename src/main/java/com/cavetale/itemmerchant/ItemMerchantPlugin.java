@@ -310,13 +310,16 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         final boolean timeChanged = time != lastUpdateTime;
         lastUpdateTime = time;
         if (!timeChanged && !force) return;
-        getLogger().info("Updating prices...");
+        if (timeChanged) {
+            getLogger().info("Updating prices and reducing storage...");
+        } else {
+            getLogger().info("Updating prices...");
+        }
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
         for (SQLItem item: items) {
             double price = calculateItemPrice(item, time);
             item.setPrice(price);
             if (timeChanged) {
-                getLogger().info("Reducing storage...");
                 int storage = item.getStorage();
                 int capacity = item.getCapacity();
                 if (storage > capacity) {
