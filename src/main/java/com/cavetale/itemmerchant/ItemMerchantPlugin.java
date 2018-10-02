@@ -96,7 +96,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         database.registerTable(SQLItem.class);
         database.createAllTables();
         loadItemPrices();
-        getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(), 200, 200);
+        getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(false), 200, 200);
         getServer().getPluginManager().registerEvents(this, this);
     }
 
@@ -269,8 +269,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             break;
         case "update":
             if (args.length == 1) {
-                lastUpdateTime = 0;
-                updateItemPrices();
+                updateItemPrices(true);
                 sender.sendMessage("Item prices updated");
                 return true;
             }
@@ -305,21 +304,27 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
      * Update all prices according to their base price, capacity, and
      * the current time. Prices change every few minutes.
      */
-    void updateItemPrices() {
+    void updateItemPrices(boolean force) {
         // Every 3 minutes
-        double time = (double)(System.currentTimeMillis() / 1000L * 60L * 3L) * Math.PI / 10.0;
-        if (time == lastUpdateTime) return;
+        final double time = (double)(System.currentTimeMillis() / 1000L * 60L * 3L) * Math.PI / 10.0;
+        final boolean timeChanged = time != lastUpdateTime;
+        lastUpdateTime = time;
+        if (!timeChanged && !force) return;
+        getLogger().info("Updating prices...");
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
         for (SQLItem item: items) {
             double price = calculateItemPrice(item, time);
-            int storage = item.getStorage();
-            int capacity = item.getCapacity();
-            if (storage > capacity) {
-                storage -= (int)(Math.random() * 0.1 * (double)capacity);
-                if (storage < 0) storage = 0;
-                item.setStorage(storage);
-            }
             item.setPrice(price);
+            if (timeChanged) {
+                getLogger().info("Reducing storage...");
+                int storage = item.getStorage();
+                int capacity = item.getCapacity();
+                if (storage > capacity) {
+                    storage -= (int)(Math.random() * 0.1 * (double)capacity);
+                    if (storage < 0) storage = 0;
+                    item.setStorage(storage);
+                }
+            }
         }
         for (SQLItem item: items) database.save(item, "price", "storage");
     }
