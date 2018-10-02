@@ -75,7 +75,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private SQLDatabase database;
     private static final int DEFAULT_CAPACITY = 1000;
     private double dbgRND, dbgCAP, dbgTIME;
-    private long lastUpdateTime;
+    private long lastUpdateTime = System.currentTimeMillis() / (1000L * 60L * 5L);
 
     // Plugin Overrides
 
