@@ -75,7 +75,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private SQLDatabase database;
     private static final int DEFAULT_CAPACITY = 1000;
     private double dbgRND, dbgCAP, dbgTIME;
-    private long lastUpdateTime = System.currentTimeMillis() / (1000L * 60L * 5L);
+    private static final long UPDATE_INTERVAL = 1000L * 60L * 5L;
+    private long lastUpdateTime = System.currentTimeMillis() / UPDATE_INTERVAL;
 
     // Plugin Overrides
 
@@ -306,7 +307,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
      */
     void updateItemPrices(boolean force) {
         // Every 10 minutes
-        final long time = System.currentTimeMillis() / (1000L * 60L * 5L);
+        final long time = System.currentTimeMillis() / UPDATE_INTERVAL;
         final boolean timeChanged = time != lastUpdateTime;
         lastUpdateTime = time;
         if (!timeChanged && !force) return;
@@ -420,7 +421,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 amount += item.getAmount();
                 totals.put(mat, amount);
             }
-            for (SQLItem d: dirty) database.save(dirty, "storage");
+            for (SQLItem d: dirty) database.save(dirty);
             lastUpdateTime = 0;
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
