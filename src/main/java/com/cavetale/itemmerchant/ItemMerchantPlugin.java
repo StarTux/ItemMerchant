@@ -445,7 +445,6 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 totals.put(mat, amount);
             }
             for (SQLItem d: dirty) database.save(d, "storage");
-            lastUpdateTime = 0;
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
             StringBuilder sb = new StringBuilder(player.getName()).append(" sold");
