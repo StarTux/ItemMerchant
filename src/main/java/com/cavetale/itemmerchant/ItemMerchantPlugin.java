@@ -212,7 +212,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     if (row != null) {
                         row.setBasePrice(price);
                         if (capacity > 0) row.setCapacity(capacity);
-                        database.save(row, "price");
+                        database.save(row);
                     } else {
                         row = new SQLItem(mat, price, capacity > 0 ? capacity : DEFAULT_CAPACITY);
                         database.save(row);
