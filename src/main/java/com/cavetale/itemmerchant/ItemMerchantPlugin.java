@@ -53,7 +53,7 @@ import org.bukkit.plugin.java.annotation.plugin.author.Author;
                    usage = "USAGE"
                    + "\n/im sell [player] - Open selling inventory"
                    + "\n/im buy [player] <category> - Open buying inventory"
-                   + "\n/im setprice [item] <amount> [capacity] - Set price of item"
+                   + "\n/im set [item] <amount> [capacity] [storage] - Set price of item"
                    + "\n/im info [item] - Get info on item"
                    + "\n/im list - List item prices"
                    + "\n/im reload - Reload configurations"
@@ -78,7 +78,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private long updateInterval = 1000L * 60L * 5L;
     private SQLDatabase database;
     private static final int DEFAULT_CAPACITY = 1000;
-    private double dbgRND, dbgCAP, dbgTIME;
+    private double dbgRND, dbgCAP;
+    private long dbgTIME;
     private long lastUpdateTime;
 
     // Plugin Overrides
@@ -169,8 +170,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 return true;
             }
             break;
-        case "setprice":
-            if (args.length >= 3 && args.length <= 4) {
+        case "set":
+            if (args.length >= 3 && args.length <= 5) {
                 List<Material> mats = new ArrayList<>();
                 String arg = args[1];
                 if (arg.startsWith("*")) {
@@ -189,36 +190,52 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     sender.sendMessage("No item matched " + arg);
                     return true;
                 }
-                double price;
+                double price = -1.0;
                 arg = args[2];
-                try {
-                    price = Double.parseDouble(arg);
-                } catch (NumberFormatException nfe) {
-                    player.sendMessage(ChatColor.RED + "Invalid price: " + arg);
-                    return true;
+                if (!arg.equals("~")) {
+                    try {
+                        price = Double.parseDouble(arg);
+                    } catch (NumberFormatException nfe) {
+                        player.sendMessage(ChatColor.RED + "Invalid price: " + arg);
+                        return true;
+                    }
                 }
                 int capacity = -1;
                 if (args.length >= 4) {
                     arg = args[3];
-                    try {
-                        capacity = Integer.parseInt(arg);
-                    } catch (NumberFormatException nfe) {
-                        player.sendMessage(ChatColor.RED + "Invalid capacity: " + arg);
-                        return true;
+                    if (!arg.equals("~")) {
+                        try {
+                            capacity = Integer.parseInt(arg);
+                        } catch (NumberFormatException nfe) {
+                            player.sendMessage(ChatColor.RED + "Invalid capacity: " + arg);
+                            return true;
+                        }
+                    }
+                }
+                int storage = -1;
+                if (args.length >= 5) {
+                    arg = args[4];
+                    if (!arg.equals("~")) {
+                        try {
+                            storage = Integer.parseInt(arg);
+                        } catch (NumberFormatException nfe) {
+                            sender.sendMessage(ChatColor.RED + "Invalid storage:" + arg);
+                            return true;
+                        }
                     }
                 }
                 for (Material mat: mats) {
                     SQLItem row = itemPrices.get(mat);
-                    if (row != null) {
-                        row.setBasePrice(price);
-                        if (capacity > 0) row.setCapacity(capacity);
-                        database.save(row);
-                    } else {
-                        row = new SQLItem(mat, price, capacity > 0 ? capacity : DEFAULT_CAPACITY);
-                        database.save(row);
+                    if (row == null) {
+                        row = new SQLItem(mat, 0.1, DEFAULT_CAPACITY);
                         itemPrices.put(mat, row);
                     }
-                    sender.sendMessage("Set price of " + mat.name().toLowerCase() + " to " + GenericEvents.formatMoney(price) + ", capacity=" + row.getCapacity() + ".");
+                    if (price > 0.0) row.setBasePrice(price);
+                    if (capacity > 0) row.setCapacity(capacity);
+                    if (storage > 0) row.setStorage(storage);
+                    row.setPrice(calculateItemPrice(row, lastUpdateTime));
+                    database.save(row);
+                    sender.sendMessage("Updated " + mat.name().toLowerCase() + " price=" + String.format("%.02f", row.getPrice()) + "/" + String.format("%.02f", row.getBasePrice()) + ", store=" + row.getStorage() + "/" + row.getCapacity() + ".");
                 }
                 return true;
             }
@@ -307,9 +324,35 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         if (args.length == 0) return null;
         String cmd = args[0];
         String arg = args[args.length - 1];
-        if ((cmd.equals("setprice") && args.length == 2)
+        if (args.length == 1) {
+            return Arrays.asList("info", "set", "sell", "buy", "info", "list", "reload", "update").stream().filter(i -> i.startsWith(arg)).collect(Collectors.toList());
+        } else if ((cmd.equals("set") && args.length == 2)
             || cmd.equals("info") && args.length == 2) {
-            return Arrays.stream(Material.values()).map(Material::name).filter(n -> n.startsWith(arg.toUpperCase())).collect(Collectors.toList());
+            return Arrays.stream(Material.values()).filter(Material::isItem).map(Material::name).filter(n -> n.startsWith(arg.toUpperCase())).collect(Collectors.toList());
+        } else if (cmd.equals("set") && args.length == 3) {
+            try {
+                Material mat = Material.valueOf(args[1].toUpperCase());
+                SQLItem item = itemPrices.get(mat);
+                return Arrays.asList("" + item.getBasePrice(), "~");
+            } catch (Exception e) {
+                return Arrays.asList("~");
+            }
+        } else if (cmd.equals("set") && args.length == 4) {
+            try {
+                Material mat = Material.valueOf(args[1].toUpperCase());
+                SQLItem item = itemPrices.get(mat);
+                return Arrays.asList("" + item.getCapacity(), "~");
+            } catch (Exception e) {
+                return Arrays.asList("~");
+            }
+        } else if (cmd.equals("set") && args.length == 5) {
+            try {
+                Material mat = Material.valueOf(args[1].toUpperCase());
+                SQLItem item = itemPrices.get(mat);
+                return Arrays.asList("" + item.getStorage(), "~");
+            } catch (Exception e) {
+                return Arrays.asList("~");
+            }
         }
         return null;
     }
@@ -344,13 +387,13 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         }
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
         for (SQLItem item: items) {
-            double price = calculateItemPrice(item, (double)time * Math.PI / 10.0);
+            double price = calculateItemPrice(item, time);
             item.setPrice(price);
             if (timeChanged) {
                 int storage = item.getStorage();
                 int capacity = item.getCapacity();
                 if (storage > capacity) {
-                    storage -= (int)(Math.random() * recoveryFactor * (double)capacity);
+                    storage -= (int)(Math.random() * recoveryFactor * (double)(capacity - storage));
                     if (storage < 0) storage = 0;
                     item.setStorage(storage);
                 }
@@ -383,8 +426,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         return result;
     }
 
-    double calculateItemPrice(SQLItem row, double rtime) {
-        final double time = rtime + row.getTimeOffset() * 2.0 * Math.PI;
+    double calculateItemPrice(SQLItem row, long rtime) {
+        final double time = ((double)rtime * Math.PI / 10.0) + (row.getTimeOffset() * 2.0 * Math.PI);
         double rnd = (0.75 * Math.sin(time) + 0.25 * Math.sin(8 * time)) * 0.5 + 0.5;
         double cap;
         if (row.getStorage() == 0 || row.getStorage() <= row.getCapacity()) {
