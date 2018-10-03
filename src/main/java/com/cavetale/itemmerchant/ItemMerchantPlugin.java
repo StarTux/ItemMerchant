@@ -91,6 +91,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         private final double price;
         boolean valid = true;
         boolean closedByPlugin;
+        boolean updatePending;
     }
 
     @Override
@@ -517,6 +518,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         final UUID playerId = player.getUniqueId();
         final InventoryContext context = openInventories.get(playerId);
         if (context == null) return;
+        if (context.updatePending) return;
+        context.updatePending = true;
         // Logic
         getServer().getScheduler().runTask(this, () -> updateSellInventory(player, context));
     }
@@ -529,6 +532,8 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         final UUID playerId = player.getUniqueId();
         final InventoryContext context = openInventories.get(playerId);
         if (context == null) return;
+        if (context.updatePending) return;
+        context.updatePending = true;
         // Logic
         getServer().getScheduler().runTask(this, () -> updateSellInventory(player, context));
     }
@@ -541,6 +546,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
      */
     private void updateSellInventory(final Player player, final InventoryContext context) {
         if (!context.valid) return;
+        context.updatePending = false;
         ItemStack cursor = context.view.getCursor();
         if (cursor != null && cursor.getType() != Material.AIR) return;
         double price = getSellingPrice(context.inventory);
