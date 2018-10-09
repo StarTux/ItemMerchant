@@ -8,11 +8,12 @@ import javax.persistence.UniqueConstraint;
 import javax.persistence.Version;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 import org.bukkit.Material;
 
 @Table(name = "items",
        uniqueConstraints = {@UniqueConstraint(columnNames = "material")})
-@Getter @Setter
+@Getter @Setter @ToString
 public final class SQLItem {
     @Id private Integer id;
     @Column(length = 32, nullable = false) private String material;

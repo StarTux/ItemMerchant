@@ -225,6 +225,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                         }
                     }
                 }
+                List<SQLItem> saveRows = new ArrayList<>(mats.size());
                 for (Material mat: mats) {
                     SQLItem row = itemPrices.get(mat);
                     if (row == null) {
@@ -235,22 +236,25 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     if (capacity > 0) row.setCapacity(capacity);
                     if (storage > 0) row.setStorage(storage);
                     row.setPrice(calculateItemPrice(row, lastUpdateTime));
-                    database.saveAsync(row, null);
+                    saveRows.add(row);
                     sender.sendMessage("Updated " + mat.name().toLowerCase() + " price=" + String.format("%.02f", row.getPrice()) + "/" + String.format("%.02f", row.getBasePrice()) + ", store=" + row.getStorage() + "/" + row.getCapacity() + ".");
                 }
+                database.saveAsync(saveRows, null);
                 return true;
             }
             break;
         case "fill":
             if (args.length == 1) {
                 int count = 0;
+                List<SQLItem> saveRows = new ArrayList<>();
                 for (Material mat: Material.values()) {
                     if (!mat.isItem() || itemPrices.containsKey(mat)) continue;
                     SQLItem row = new SQLItem(mat, 0.10, DEFAULT_CAPACITY);
-                    database.saveAsync(row, null);
+                    saveRows.add(row);
                     itemPrices.put(mat, row);
                     count += 1;
                 }
+                database.saveAsync(saveRows, null);
                 sender.sendMessage(count + " Items inserted");
                 return true;
             }
@@ -401,7 +405,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             double price = calculateItemPrice(item, time);
             item.setPrice(price);
         }
-        for (SQLItem item: items) database.saveAsync(item, null, "price", "storage");
+        database.saveAsync(items, null, "price", "storage");
     }
 
     // Utility
@@ -492,7 +496,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 amount += item.getAmount();
                 totals.put(mat, amount);
             }
-            for (SQLItem d: dirty) database.saveAsync(d, null, "storage");
+            database.saveAsync(dirty, null, "storage");
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
             StringBuilder sb = new StringBuilder(player.getName()).append(" sold");
