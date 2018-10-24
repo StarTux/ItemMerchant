@@ -143,7 +143,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                     }
                 } else {
                     if (player == null) {
-                        sender.sendMessage("Player expected");
+                        getLogger().info("Player expected");
                         return true;
                     }
                     target = player;
