@@ -1,6 +1,3 @@
-price:
-  Base: 0.5
-  Capacity: 0.25
-  Random: 0.25
-RecoveryFactor: 0.01
+RandomFactor: 0.25
+RecoveryFactor: 0.001 # 1/1000 Per player
 UpdateInterval: 5 # In minutes

@@ -71,13 +71,11 @@ import org.bukkit.plugin.java.annotation.plugin.author.Author;
 public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     private final Map<UUID, InventoryContext> openInventories = new HashMap<>();
     private final Map<Material, SQLItem> itemPrices = new HashMap<>();
-    private double baseFactor;
-    private double capacityFactor;
     private double randomFactor;
     private double recoveryFactor = 0.01;
-    private long updateInterval = 1000L * 60L * 5L;
+    private long updateInterval = 1000L * 60L * 5L; // In milliseconds
     private SQLDatabase database;
-    private static final int DEFAULT_CAPACITY = 1000;
+    private static final int DEFAULT_CAPACITY = 500;
     private double dbgRND, dbgCAP;
     private long dbgTIME;
     private long lastUpdateTime;
@@ -109,9 +107,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
 
     void importConfig() {
         reloadConfig();
-        baseFactor = getConfig().getDouble("price.Base");
-        capacityFactor = getConfig().getDouble("price.Capacity");
-        randomFactor = getConfig().getDouble("price.Random");
+        randomFactor = getConfig().getDouble("RandomFactor");
         recoveryFactor = getConfig().getDouble("RecoveryFactor");
         updateInterval = Math.max(1L, getConfig().getLong("UpdateInterval")) * 1000L * 60L;
     }
@@ -288,10 +284,11 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 }
                 double base = row.getBasePrice();
                 sender.sendMessage(row.getMaterial() + " §7price§8=§e" + fmt(row.getPrice()) + "§8/§6" + fmt(base) + " §7store§8=§e" + fmt(row.getStorage()) + "§8/§6" + fmt(row.getCapacity()) + " §7off§8=§e" + fmt(row.getTimeOffset()));
-                calculateItemPrice(row, dbgTIME);
-                sender.sendMessage("§ccap§4=§f" + fmt(dbgCAP) + "§8*§f" + fmt(capacityFactor) + "§8=>§f" + fmt(dbgCAP * capacityFactor) + "§8*§f" + fmt(base) + "§8=>§f" + fmt(dbgCAP * capacityFactor * base));
-                sender.sendMessage("§crnd§4=§f" + fmt(dbgRND) + "§8*§f" + fmt(randomFactor) + "§8=>§f" + fmt(dbgRND * randomFactor) + "§8*§f" + fmt(base) + "§8=>§f" + fmt(dbgRND * randomFactor * base));
-                sender.sendMessage("§cfactor§8=§f" + fmt(baseFactor + capacityFactor * dbgCAP + randomFactor * dbgRND));
+                double price = calculateItemPrice(row, dbgTIME);
+                sender.sendMessage("§ccap§4=§f" + fmt(dbgCAP) + "§8*§f" + fmt(base) + " §8=§f " + fmt(dbgCAP * base));
+                sender.sendMessage("§crnd§4=§f" + fmt(dbgRND) + "§8*§f" + fmt(randomFactor) + " §8=§f " + fmt(dbgRND * randomFactor));
+                sender.sendMessage("§cprice§8=§f" + fmt(base) + "§8*§f" + fmt(dbgCAP) + "§8*(§f1§8*-§f" + fmt(randomFactor) + "§8*§f" + fmt(dbgRND) + "§8)"
+                                   + " §8=§f " + fmt(base * dbgCAP) + "§8*§f" + fmt(1.0 - randomFactor * dbgRND));
                 return true;
             }
             break;
@@ -386,24 +383,28 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
         final boolean timeChanged = (time != lastUpdateTime);
         lastUpdateTime = time;
         if (!timeChanged && !force) return;
-        if (timeChanged) {
-            getLogger().info("Updating prices and reducing storage...");
-        } else {
-            getLogger().info("Updating prices...");
-        }
         final List<SQLItem> items = new ArrayList<>(itemPrices.values());
+        final int playerCount = getServer().getOnlinePlayers().size();
+        int totalStorageReduction = 0;
         for (SQLItem item: items) {
             if (timeChanged) {
                 int storage = item.getStorage();
                 int capacity = item.getCapacity();
                 if (storage > capacity) {
-                    storage -= (int)(Math.random() * recoveryFactor * capacity);
-                    if (storage < capacity) storage = capacity;
+                    int storageReduction = Math.min(storage - capacity,
+                                                    (int)(Math.random() * recoveryFactor * (double)playerCount * capacity));
+                    totalStorageReduction += storageReduction;
+                    storage -= storageReduction;
                     item.setStorage(storage);
                 }
             }
             double price = calculateItemPrice(item, time);
             item.setPrice(price);
+        }
+        if (timeChanged) {
+            getLogger().info("Updated item prices and reduced storage by " + totalStorageReduction + ".");
+        } else {
+            getLogger().info("Updated item prices.");
         }
         database.saveAsync(items, null, "price", "storage");
     }
@@ -433,7 +434,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
     }
 
     double calculateItemPrice(SQLItem row, long rtime) {
-        final double time = ((double)rtime * Math.PI / 10.0) + (row.getTimeOffset() * 2.0 * Math.PI);
+        final double time = ((double)rtime * Math.PI * 0.01) + (row.getTimeOffset() * 2.0 * Math.PI);
         double rnd = (0.75 * Math.sin(time) + 0.25 * Math.sin(8 * time)) * 0.5 + 0.5;
         double cap;
         if (row.getStorage() == 0 || row.getStorage() <= row.getCapacity()) {
@@ -442,7 +443,7 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
             cap = 1.0 / ((double)row.getStorage() / (double)row.getCapacity());
             cap = Math.min(1.0, Math.max(0.0, cap));
         }
-        double price = row.getBasePrice() * (baseFactor + capacityFactor * cap + randomFactor * rnd);
+        double price = row.getBasePrice() * cap * (1.0 - randomFactor * rnd);
         this.dbgTIME = rtime;
         this.dbgRND = rnd;
         this.dbgCAP = cap;
@@ -496,7 +497,11 @@ public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
                 amount += item.getAmount();
                 totals.put(mat, amount);
             }
-            database.saveAsync(dirty, null, "storage");
+            for (SQLItem item: dirty) {
+                double newPrice = calculateItemPrice(item, this.lastUpdateTime);
+                item.setPrice(newPrice);
+            }
+            database.saveAsync(dirty, null, "storage", "price");
             GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
             player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
             StringBuilder sb = new StringBuilder(player.getName()).append(" sold");
