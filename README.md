@@ -21,6 +21,10 @@ A player would initiate a sale via the `/sell` command. A chest menu opens, givi
     - `item <name>`
     - `player <name>`
 
+## Permissions
+- `itemmerchant.sell` Use `/sell`
+- `itemmerchant.admin` Use `/im'
+
 ## Dependencies
 This plugin requires the **Cavetale** standard libraries:
 - `GenericEvents`
