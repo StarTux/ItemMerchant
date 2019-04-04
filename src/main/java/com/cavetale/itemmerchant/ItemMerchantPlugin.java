@@ -76,6 +76,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
             player.sendMessage(ChatColor.RED + "Usage: /sell");
             return true;
         }
+        player.playSound(player.getEyeLocation(), Sound.BLOCK_CHEST_OPEN, SoundCategory.MASTER, 0.5f, 1.0f);
         openShopChest(player);
         return true;
     }
