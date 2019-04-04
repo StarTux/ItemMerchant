@@ -31,27 +31,23 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ItemMerchantPlugin extends JavaPlugin {
     private Map<Material, Double> materialPrices;
-    @Getter private SQLDatabase sqlDatabase = null;
+    @Getter private SQLDatabase sqlDatabase;
 
     // Plugin Overrides
 
     @Override
     public void onEnable() {
-        saveDefaultConfig();
+        try {
+            this.sqlDatabase = new SQLDatabase(this);
+            this.sqlDatabase.registerTables(SQLLog.class, SQLPrice.class);
+            this.sqlDatabase.createAllTables();
+        } catch (Exception e) {
+            getLogger().warning("Setting up databases");
+            throw new IllegalStateException(e);
+        }
         loadMaterialPrices();
         getCommand("itemmerchant").setExecutor(new ItemMerchantCommand(this));
         getServer().getPluginManager().registerEvents(new ChestMenuListener(), this);
-        reloadConfig();
-        if (getConfig().getBoolean("logging")) {
-            try {
-                this.sqlDatabase = new SQLDatabase(this);
-                this.sqlDatabase.registerTables(SQLLog.class);
-                this.sqlDatabase.createAllTables();
-            } catch (Exception e) {
-                e.printStackTrace();
-                this.sqlDatabase = null;
-            }
-        }
     }
 
     @Override
@@ -84,20 +80,11 @@ public final class ItemMerchantPlugin extends JavaPlugin {
     // Data Import
 
     void loadMaterialPrices() {
-        File file = new File(getDataFolder(), "prices.yml");
-        if (!file.exists()) saveResource("prices.yml", false);
-        this.materialPrices = importMaterialPrices(file);
-    }
-
-    void saveMaterialPrices() {
-        File file = new File(getDataFolder(), "prices.yml");
-        YamlConfiguration cfg = new YamlConfiguration();
-        this.materialPrices.forEach((k, v) -> cfg.set(k.name().toLowerCase(), v));
-        try {
-            cfg.save(file);
-        } catch (IOException ioe) {
-            throw new RuntimeException(ioe);
-        }
+        this.materialPrices = new EnumMap<>(Material.class);
+        this.sqlDatabase.find(SQLPrice.class).findList().forEach(row -> {
+                Material mat = Material.valueOf(row.getMaterial().toUpperCase());
+                this.materialPrices.put(mat, row.getPrice());
+            });
     }
 
     void setMaterialPrice(Material mat, double price) {
@@ -105,6 +92,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         if (Double.isNaN(price)) throw new IllegalArgumentException("Price cannot be NaN!");
         if (Double.isInfinite(price)) throw new IllegalArgumentException("Price cannot be infinite!");
         this.materialPrices.put(Objects.requireNonNull(mat, "Material cannot be null!"), price);
+        this.sqlDatabase.save(new SQLPrice(mat, price));
     }
 
     double getMaterialPrice(Material mat) {
@@ -112,7 +100,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         return res != null ? res : 0;
     }
 
-    // Logging
+    // Import Export
 
     static Map<Material, Double> importMaterialPrices(File file) {
         Map<Material, Double> result = new HashMap<>();
@@ -127,6 +115,16 @@ public final class ItemMerchantPlugin extends JavaPlugin {
             result.put(mat, cfg.getDouble(key));
         }
         return result;
+    }
+
+    void exportMaterialPrices(File file) {
+        YamlConfiguration cfg = new YamlConfiguration();
+        this.materialPrices.forEach((k, v) -> cfg.set(k.name().toLowerCase(), v));
+        try {
+            cfg.save(file);
+        } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+        }
     }
 
     // Chest Menu
@@ -232,7 +230,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         double money = (double)totalSold * pricePerItem;
         String nice = niceEnum(mat.name());
         GenericEvents.givePlayerMoney(player.getUniqueId(), money, this, "Sold " + totalSold + "x" + nice);
-        getLogger().info(player.getName() + " (" + player.getUniqueId() + ") sold " + totalSold + "x" + mat.name() + " for " + fmt(money) + ".");
+        getLogger().info(player.getName() + " sold " + totalSold + "x" + mat.name() + " for " + fmt(money) + ".");
         final String rs = "" + ChatColor.RESET;
         final String hl = "" + ChatColor.GREEN;
         final String pr = "" + ChatColor.GREEN + ChatColor.UNDERLINE;

@@ -21,6 +21,7 @@ commands:
       /im set <item> <price> - Update price.
       /im get <item> - Look up price.
       /im list <pattern> - Look up prices.
+      /im import|export - Prices from/to file.
       /im rank <what> <filters> - Rank sales.
         what: items|players
         filters: days <number>

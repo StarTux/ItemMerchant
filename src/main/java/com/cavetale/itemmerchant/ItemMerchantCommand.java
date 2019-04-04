@@ -1,6 +1,7 @@
 package com.cavetale.itemmerchant;
 
 import com.winthier.generic_events.GenericEvents;
+import java.io.File;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.EnumMap;
@@ -22,7 +23,7 @@ import org.bukkit.command.TabExecutor;
 @RequiredArgsConstructor
 final class ItemMerchantCommand implements TabExecutor {
     private final ItemMerchantPlugin plugin;
-    private static final List<String> COMMANDS = Arrays.asList("get", "set", "list", "rank");
+    private static final List<String> COMMANDS = Arrays.asList("get", "set", "list", "rank", "import", "export");
 
     static class CommandException extends Exception {
         CommandException(String msg) {
@@ -63,7 +64,6 @@ final class ItemMerchantCommand implements TabExecutor {
             Material mat = expectMaterial(args[0]);
             double price = expectPrice(args[1]);
             this.plugin.setMaterialPrice(mat, price);
-            this.plugin.saveMaterialPrices();
             sender.sendMessage("Price of " + this.plugin.niceEnum(mat.name())
                                + " is now " + this.plugin.fmt(price) + ".");
             return true;
@@ -185,6 +185,21 @@ final class ItemMerchantCommand implements TabExecutor {
             }
             default: throw new CommandException("Invalid what: " + what);
             }
+            return true;
+        }
+        case "import": {
+            File file = new File(this.plugin.getDataFolder(), "prices.yml");
+            if (!file.exists()) throw new CommandException("File not found: " + file);
+            long count = this.plugin.importMaterialPrices(file).entrySet().stream().peek(e -> {
+                    this.plugin.setMaterialPrice(e.getKey(), e.getValue());
+                }).count();
+            sender.sendMessage("" + count + " prices imported from " + file + ".");
+            return true;
+        }
+        case "export": {
+            File file = new File(this.plugin.getDataFolder(), "prices.yml");
+            this.plugin.exportMaterialPrices(file);
+            sender.sendMessage("Prices written to " + file + ".");
             return true;
         }
         default:
