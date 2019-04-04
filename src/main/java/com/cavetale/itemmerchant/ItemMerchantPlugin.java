@@ -2,586 +2,256 @@ package com.cavetale.itemmerchant;
 
 import com.winthier.generic_events.GenericEvents;
 import com.winthier.sql.SQLDatabase;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.Objects;
 import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
-import org.bukkit.Bukkit;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
+import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
-import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryView;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.permissions.PermissionDefault;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.plugin.java.annotation.command.Command;
-import org.bukkit.plugin.java.annotation.command.Commands;
-import org.bukkit.plugin.java.annotation.dependency.Dependency;
-import org.bukkit.plugin.java.annotation.permission.Permission;
-import org.bukkit.plugin.java.annotation.permission.Permissions;
-import org.bukkit.plugin.java.annotation.plugin.ApiVersion;
-import org.bukkit.plugin.java.annotation.plugin.Description;
-import org.bukkit.plugin.java.annotation.plugin.Plugin;
-import org.bukkit.plugin.java.annotation.plugin.Website;
-import org.bukkit.plugin.java.annotation.plugin.author.Author;
 
-@Plugin(name = "ItemMerchant", version = "0.1")
-@Dependency("GenericEvents")
-@Dependency("SQL")
-@Description("Sell or buy items to or from virtual merchants")
-@ApiVersion(ApiVersion.Target.v1_13)
-@Author("StarTux")
-@Website("https://cavetale.com")
-@Commands(@Command(name = "itemmerchant",
-                   desc = "Admin interface",
-                   aliases = {"im"},
-                   permission = "itemmerchant.itemmerchant",
-                   usage = "USAGE"
-                   + "\n/im sell [player] - Open selling inventory"
-                   + "\n/im buy [player] <category> - Open buying inventory"
-                   + "\n/im set [item] <amount> [capacity] [storage] - Set price of item"
-                   + "\n/im info [item] - Get info on item"
-                   + "\n/im list - List item prices"
-                   + "\n/im reload - Reload configurations"
-                   + "\n/im update - Update all item prices"))
-@Permissions(@Permission(name = "itemmerchant.itemmerchant",
-                         desc = "Use /itemmerchant",
-                         defaultValue = PermissionDefault.OP))
-
-/**
- * The goal is to have an inventory window which will dynamically
- * update its title to reflect the current selling price. To
- * accomplish this, the inventory will have to be closed and reopened
- * with items intact whenever the player changes the content.
- */
-public final class ItemMerchantPlugin extends JavaPlugin implements Listener {
-    private final Map<UUID, InventoryContext> openInventories = new HashMap<>();
-    private final Map<Material, SQLItem> itemPrices = new HashMap<>();
-    private double randomFactor;
-    private double recoveryFactor = 0.01;
-    private long updateInterval = 1000L * 60L * 5L; // In milliseconds
-    private SQLDatabase database;
-    private static final int DEFAULT_CAPACITY = 500;
-    private double dbgRND, dbgCAP;
-    private long dbgTIME;
-    private long lastUpdateTime;
+public final class ItemMerchantPlugin extends JavaPlugin {
+    private Map<Material, Double> materialPrices;
+    @Getter private SQLDatabase sqlDatabase = null;
 
     // Plugin Overrides
-
-    @RequiredArgsConstructor
-    static final class InventoryContext {
-        private final Inventory inventory;
-        private final InventoryView view;
-        private final double price;
-        boolean valid = true;
-        boolean closedByPlugin;
-        boolean updatePending;
-    }
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        importConfig();
-        database = new SQLDatabase(this);
-        database.registerTable(SQLItem.class);
-        database.createAllTables();
-        loadItemPrices();
-        getServer().getScheduler().runTaskTimer(this, () -> updateItemPrices(false), 200, 200);
-        getServer().getPluginManager().registerEvents(this, this);
-        lastUpdateTime = System.currentTimeMillis() / updateInterval;
-    }
-
-    void importConfig() {
+        loadMaterialPrices();
+        getCommand("itemmerchant").setExecutor(new ItemMerchantCommand(this));
+        getServer().getPluginManager().registerEvents(new ChestMenuListener(), this);
         reloadConfig();
-        randomFactor = getConfig().getDouble("RandomFactor");
-        recoveryFactor = getConfig().getDouble("RecoveryFactor");
-        updateInterval = Math.max(1L, getConfig().getLong("UpdateInterval")) * 1000L * 60L;
+        if (getConfig().getBoolean("logging")) {
+            try {
+                this.sqlDatabase = new SQLDatabase(this);
+                this.sqlDatabase.registerTables(SQLLog.class);
+                this.sqlDatabase.createAllTables();
+            } catch (Exception e) {
+                e.printStackTrace();
+                this.sqlDatabase = null;
+            }
+        }
     }
 
     @Override
     public void onDisable() {
-        for (UUID uuid: openInventories.keySet()) {
-            Player player = Bukkit.getPlayer(uuid);
-            if (player != null) player.closeInventory();
-        }
-        openInventories.clear();
-    }
-
-    @Override
-    public boolean onCommand(CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
-        Player player = sender instanceof Player ? (Player)sender : null;
-        Player target; // Targeted by command, where it applies
-        if (args.length == 0) return false;
-        switch (args[0]) {
-        case "sell":
-            if (args.length == 1 || args.length == 2) {
-                // Find target
-                if (args.length >= 2) {
-                    String name = args[1];
-                    target = getServer().getPlayerExact(name);
-                    if (target == null) {
-                        sender.sendMessage("Player not found: " + name);
-                        return true;
-                    }
-                } else {
-                    if (player == null) {
-                        getLogger().info("Player expected");
-                        return true;
-                    }
-                    target = player;
-                }
-                openSellInventory(target, ChatColor.BLUE + "Sell me Items", 4 * 9);
-                sender.sendMessage("Opened selling inventory for " + target.getName());
-                return true;
-            }
-            break;
-        case "buy":
-            if (args.length == 2 || args.length == 3) {
-                int argi = 1;
-                if (args.length >= 3) {
-                    String name = args[argi++];
-                    target = getServer().getPlayerExact(name);
-                    if (target == null) {
-                        sender.sendMessage("Player not found: " + name);
-                        return true;
-                    }
-                } else {
-                    target = player;
-                }
-                String shopName = args[argi++];
-                // TODO: find and open buy shop
-                return true;
-            }
-            break;
-        case "set":
-            if (args.length >= 3 && args.length <= 5) {
-                List<Material> mats = new ArrayList<>();
-                String arg = args[1];
-                if (arg.startsWith("*")) {
-                    arg = arg.substring(1);
-                    for (Material mat: Material.values()) {
-                        if (mat.name().endsWith(arg.toUpperCase())) {
-                            mats.add(mat);
-                        }
-                    }
-                } else {
-                    try {
-                        mats.add(Material.valueOf(arg.toUpperCase()));
-                    } catch (IllegalArgumentException iae) { }
-                }
-                if (mats.isEmpty()) {
-                    sender.sendMessage("No item matched " + arg);
-                    return true;
-                }
-                double price = -1.0;
-                arg = args[2];
-                if (!arg.equals("~")) {
-                    try {
-                        price = Double.parseDouble(arg);
-                    } catch (NumberFormatException nfe) {
-                        player.sendMessage(ChatColor.RED + "Invalid price: " + arg);
-                        return true;
-                    }
-                }
-                int capacity = -1;
-                if (args.length >= 4) {
-                    arg = args[3];
-                    if (!arg.equals("~")) {
-                        try {
-                            capacity = Integer.parseInt(arg);
-                        } catch (NumberFormatException nfe) {
-                            player.sendMessage(ChatColor.RED + "Invalid capacity: " + arg);
-                            return true;
-                        }
-                    }
-                }
-                int storage = -1;
-                if (args.length >= 5) {
-                    arg = args[4];
-                    if (!arg.equals("~")) {
-                        try {
-                            storage = Integer.parseInt(arg);
-                        } catch (NumberFormatException nfe) {
-                            sender.sendMessage(ChatColor.RED + "Invalid storage:" + arg);
-                            return true;
-                        }
-                    }
-                }
-                List<SQLItem> saveRows = new ArrayList<>(mats.size());
-                for (Material mat: mats) {
-                    SQLItem row = itemPrices.get(mat);
-                    if (row == null) {
-                        row = new SQLItem(mat, 0.1, DEFAULT_CAPACITY);
-                        itemPrices.put(mat, row);
-                    }
-                    if (price > 0.0) row.setBasePrice(price);
-                    if (capacity > 0) row.setCapacity(capacity);
-                    if (storage > 0) row.setStorage(storage);
-                    row.setPrice(calculateItemPrice(row, lastUpdateTime));
-                    saveRows.add(row);
-                    sender.sendMessage("Updated " + mat.name().toLowerCase() + " price=" + String.format("%.02f", row.getPrice()) + "/" + String.format("%.02f", row.getBasePrice()) + ", store=" + row.getStorage() + "/" + row.getCapacity() + ".");
-                }
-                database.saveAsync(saveRows, null);
-                return true;
-            }
-            break;
-        case "fill":
-            if (args.length == 1) {
-                int count = 0;
-                List<SQLItem> saveRows = new ArrayList<>();
-                for (Material mat: Material.values()) {
-                    if (!mat.isItem() || itemPrices.containsKey(mat)) continue;
-                    SQLItem row = new SQLItem(mat, 0.10, DEFAULT_CAPACITY);
-                    saveRows.add(row);
-                    itemPrices.put(mat, row);
-                    count += 1;
-                }
-                database.saveAsync(saveRows, null);
-                sender.sendMessage(count + " Items inserted");
-                return true;
-            }
-            break;
-        case "info":
-            if (args.length == 1 || args.length == 2) {
-                Material mat;
-                if (args.length == 1) {
-                    if (player == null) {
-                        sender.sendMessage("Player expected.");
-                        return true;
-                    }
-                    ItemStack item = player.getInventory().getItemInMainHand();
-                    if (item == null || item.getType() == Material.AIR) {
-                        player.sendMessage(ChatColor.RED + "No item in hand.");
-                        return true;
-                    }
-                    mat = item.getType();
-                } else {
-                    try {
-                        mat = Material.valueOf(args[1].toUpperCase());
-                    } catch (IllegalArgumentException iae) {
-                        sender.sendMessage(ChatColor.RED + "Unknown item: " + args[1]);
-                        return true;
-                    }
-                }
-                SQLItem row = itemPrices.get(mat);
-                if (row == null) {
-                    sender.sendMessage(ChatColor.RED + "No entry for " + mat);
-                    return true;
-                }
-                double base = row.getBasePrice();
-                sender.sendMessage(row.getMaterial() + " §7price§8=§e" + fmt(row.getPrice()) + "§8/§6" + fmt(base) + " §7store§8=§e" + fmt(row.getStorage()) + "§8/§6" + fmt(row.getCapacity()) + " §7off§8=§e" + fmt(row.getTimeOffset()));
-                double price = calculateItemPrice(row, dbgTIME);
-                sender.sendMessage("§ccap§4=§f" + fmt(dbgCAP) + "§8*§f" + fmt(base) + " §8=§f " + fmt(dbgCAP * base));
-                sender.sendMessage("§crnd§4=§f" + fmt(dbgRND) + "§8*§f" + fmt(randomFactor) + " §8=§f " + fmt(dbgRND * randomFactor));
-                sender.sendMessage("§cprice§8=§f" + fmt(base) + "§8*§f" + fmt(dbgCAP) + "§8*(§f1§8*-§f" + fmt(randomFactor) + "§8*§f" + fmt(dbgRND) + "§8)"
-                                   + " §8=§f " + fmt(base * dbgCAP) + "§8*§f" + fmt(1.0 - randomFactor * dbgRND));
-                return true;
-            }
-            break;
-        case "list":
-            if (args.length == 1) {
-                sender.sendMessage("" + ChatColor.YELLOW + itemPrices.size() + " Items:");
-                for (SQLItem row: itemPrices.values()) {
-                    sender.sendMessage(ChatColor.YELLOW + String.format("%s base=%.02f off=%.02f cap=%d stor=%d price=%.02f", row.getMaterial(), row.getBasePrice(), row.getTimeOffset(), row.getCapacity(), row.getStorage(), row.getPrice()));
-                }
-                return true;
-            }
-            break;
-        case "update":
-            if (args.length == 1) {
-                updateItemPrices(true);
-                sender.sendMessage("Item prices updated");
-                return true;
-            }
-            break;
-        case "reload":
-            if (args.length == 1) {
-                importConfig();
-                loadItemPrices();
-                sender.sendMessage("Configuration and database reloaded.");
-                return true;
-            }
-            break;
-        default:
-            break;
-        }
-        return false;
-    }
-
-    @Override
-    public List<String> onTabComplete(CommandSender sender, org.bukkit.command.Command command, String alias, String[] args) {
-        if (args.length == 0) return null;
-        String cmd = args[0];
-        String arg = args[args.length - 1];
-        if (args.length == 1) {
-            return Arrays.asList("info", "set", "sell", "buy", "info", "list", "reload", "update").stream().filter(i -> i.startsWith(arg)).collect(Collectors.toList());
-        } else if ((cmd.equals("set") && args.length == 2)
-            || cmd.equals("info") && args.length == 2) {
-            return Arrays.stream(Material.values()).filter(Material::isItem).map(Material::name).filter(n -> n.startsWith(arg.toUpperCase())).collect(Collectors.toList());
-        } else if (cmd.equals("set") && args.length == 3) {
-            try {
-                Material mat = Material.valueOf(args[1].toUpperCase());
-                SQLItem item = itemPrices.get(mat);
-                return Arrays.asList("" + item.getBasePrice(), "~");
-            } catch (Exception e) {
-                return Arrays.asList("~");
-            }
-        } else if (cmd.equals("set") && args.length == 4) {
-            try {
-                Material mat = Material.valueOf(args[1].toUpperCase());
-                SQLItem item = itemPrices.get(mat);
-                return Arrays.asList("" + item.getCapacity(), "~");
-            } catch (Exception e) {
-                return Arrays.asList("~");
-            }
-        } else if (cmd.equals("set") && args.length == 5) {
-            try {
-                Material mat = Material.valueOf(args[1].toUpperCase());
-                SQLItem item = itemPrices.get(mat);
-                return Arrays.asList("" + item.getStorage(), "~");
-            } catch (Exception e) {
-                return Arrays.asList("~");
-            }
-        }
-        return null;
-    }
-
-    // --- IO
-
-    /**
-     * Replace the current cache with the contents of the database.
-     */
-    void loadItemPrices() {
-        itemPrices.clear();
-        for (SQLItem row: database.find(SQLItem.class).findList()) {
-            Material mat = Material.valueOf(row.getMaterial().toUpperCase());
-            itemPrices.put(mat, row);
-        }
+        getServer().getOnlinePlayers().forEach((player) -> {
+            InventoryView view = player.getOpenInventory();
+            if (view != null && view.getTopInventory().getHolder() instanceof ChestMenu) player.closeInventory();
+        });
     }
 
     /**
-     * Update all prices according to their base price, capacity, and
-     * the current time. Prices change every few minutes.
+     * The /sell command.
      */
-    void updateItemPrices(boolean force) {
-        // Every 10 minutes
-        final long time = System.currentTimeMillis() / updateInterval;
-        final boolean timeChanged = (time != lastUpdateTime);
-        lastUpdateTime = time;
-        if (!timeChanged && !force) return;
-        final List<SQLItem> items = new ArrayList<>(itemPrices.values());
-        final int playerCount = getServer().getOnlinePlayers().size();
-        int totalStorageReduction = 0;
-        for (SQLItem item: items) {
-            if (timeChanged) {
-                int storage = item.getStorage();
-                int capacity = item.getCapacity();
-                if (storage > capacity) {
-                    int storageReduction = Math.min(storage - capacity,
-                                                    (int)(Math.random() * recoveryFactor * (double)playerCount * capacity));
-                    totalStorageReduction += storageReduction;
-                    storage -= storageReduction;
-                    item.setStorage(storage);
-                }
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String alias, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage("Player expected!");
+            return true;
+        }
+        Player player = (Player)sender;
+        if (args.length != 0) {
+            player.sendMessage(ChatColor.RED + "Usage: /sell");
+            return true;
+        }
+        openShopChest(player);
+        return true;
+    }
+
+    // Data Import
+
+    void loadMaterialPrices() {
+        File file = new File(getDataFolder(), "prices.yml");
+        if (!file.exists()) saveResource("prices.yml", false);
+        this.materialPrices = importMaterialPrices(file);
+    }
+
+    void saveMaterialPrices() {
+        File file = new File(getDataFolder(), "prices.yml");
+        YamlConfiguration cfg = new YamlConfiguration();
+        this.materialPrices.forEach((k, v) -> cfg.set(k.name().toLowerCase(), v));
+        try {
+            cfg.save(file);
+        } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+        }
+    }
+
+    void setMaterialPrice(Material mat, double price) {
+        if (price < 0) throw new IllegalArgumentException("Price cannot be negative!");
+        if (Double.isNaN(price)) throw new IllegalArgumentException("Price cannot be NaN!");
+        if (Double.isInfinite(price)) throw new IllegalArgumentException("Price cannot be infinite!");
+        this.materialPrices.put(Objects.requireNonNull(mat, "Material cannot be null!"), price);
+    }
+
+    double getMaterialPrice(Material mat) {
+        Double res = this.materialPrices.get(Objects.requireNonNull(mat, "Material cannot be null!"));
+        return res != null ? res : 0;
+    }
+
+    // Logging
+
+    static Map<Material, Double> importMaterialPrices(File file) {
+        Map<Material, Double> result = new HashMap<>();
+        YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
+        for (String key: cfg.getKeys(false)) {
+            final Material mat;
+            try {
+                mat = Material.valueOf(key.toUpperCase());
+            } catch (IllegalArgumentException iae) {
+                throw new IllegalArgumentException("Unknown material in prices.yml: " + key);
             }
-            double price = calculateItemPrice(item, time);
-            item.setPrice(price);
-        }
-        if (timeChanged) {
-            getLogger().info("Updated item prices and reduced storage by " + totalStorageReduction + ".");
-        } else {
-            getLogger().info("Updated item prices.");
-        }
-        database.saveAsync(items, null, "price", "storage");
-    }
-
-    // Utility
-
-    double getSellingPrice(ItemStack item) {
-        if (new ItemStack(item.getType(), item.getAmount()).equals(item)) {
-            SQLItem sqli = itemPrices.get(item.getType());
-            if (sqli == null) return 0.0;
-            return sqli.getPrice() * (double)item.getAmount();
-        } else {
-            return -1.0;
-        }
-    }
-
-    double getSellingPrice(Inventory inventory) {
-        double result = 0.0;
-        for (ItemStack item: inventory) {
-            if (item == null || item.getType() == Material.AIR) continue;
-            double itemPrice = getSellingPrice(item);
-            // Return false if a single item is invalid.
-            if (itemPrice < 0) return itemPrice;
-            result += itemPrice;
+            result.put(mat, cfg.getDouble(key));
         }
         return result;
     }
 
-    double calculateItemPrice(SQLItem row, long rtime) {
-        final double time = ((double)rtime * Math.PI * 0.01) + (row.getTimeOffset() * 2.0 * Math.PI);
-        double rnd = (0.75 * Math.sin(time) + 0.25 * Math.sin(8 * time)) * 0.5 + 0.5;
-        double cap;
-        if (row.getStorage() == 0 || row.getStorage() <= row.getCapacity()) {
-            cap = 1.0;
-        } else {
-            cap = 1.0 / ((double)row.getStorage() / (double)row.getCapacity());
-            cap = Math.min(1.0, Math.max(0.0, cap));
+    // Chest Menu
+
+    @AllArgsConstructor
+    final class ItemCache {
+        final int index;
+        double price;
+        int amount;
+    }
+
+    InventoryView openShopChest(Player player) {
+        Inventory playerInv = player.getInventory();
+        Map<Material, ItemCache> items = new EnumMap<>(Material.class);
+        ChestMenu menu = new ChestMenu();
+        menu.createInventory(4 * 9, "" + ChatColor.DARK_PURPLE + ChatColor.BOLD + "Sell Items");
+        for (int menuIndex = 0; menuIndex < 4 * 9; menuIndex += 1) {
+            int playerIndex = menuIndex < 27 ? menuIndex + 9 : menuIndex - 27;
+            ItemStack item = playerInv.getItem(playerIndex);
+            if (item == null) continue;
+            Material mat = item.getType();
+            if (mat == Material.AIR) continue;
+            if (!item.isSimilar(new ItemStack(mat))) continue;
+            if (items.containsKey(mat)) {
+                items.get(mat).amount += item.getAmount();
+            } else {
+                Double price = this.materialPrices.get(mat);
+                if (price == null || price <= 0.0) price = 0.0;
+                items.put(mat, new ItemCache(menuIndex, price, item.getAmount()));
+            }
         }
-        double price = row.getBasePrice() * cap * (1.0 - randomFactor * rnd);
-        this.dbgTIME = rtime;
-        this.dbgRND = rnd;
-        this.dbgCAP = cap;
-        return price;
+        final String cl = "" + ChatColor.GREEN + ChatColor.BOLD;
+        final String pu = "" + ChatColor.DARK_PURPLE + ChatColor.ITALIC;
+        final String pr = "" + ChatColor.GREEN + ChatColor.ITALIC + ChatColor.UNDERLINE;
+        final String vl = " " + ChatColor.LIGHT_PURPLE + ChatColor.STRIKETHROUGH
+            + "                                 ";
+        items.forEach((mat, item) -> {
+            if (item.price < 0.01) return;
+            ItemStack menuItem = new ItemStack(mat);
+            ItemMeta meta = menuItem.getItemMeta();
+            List<String> lore = new ArrayList<>();
+            lore.add(cl + "Left click " + ChatColor.DARK_PURPLE + "to sell one item");
+            lore.add("for " + pr + GenericEvents.formatMoney(item.price) + pu + ".");
+            int stack = mat.getMaxStackSize();
+            if (stack > 1 && item.amount > 1) {
+                int amount = Math.min(stack, item.amount);
+                lore.add(vl);
+                lore.add(cl + "Right click " + ChatColor.DARK_PURPLE + "to sell one stack");
+                lore.add("(" + amount + " items) for "
+                         + pr + GenericEvents.formatMoney(item.price * (double)amount) + pu + ".");
+            }
+            if (item.amount > 1) {
+                lore.add(vl);
+                lore.add(cl + "Shift click " + ChatColor.DARK_PURPLE + "to sell all");
+                lore.add("(" + item.amount + " items) for "
+                         + pr + GenericEvents.formatMoney(item.price * (double)item.amount) + pu + ".");
+            }
+            meta.setLore(lore);
+            menuItem.setItemMeta(meta);
+            menu.setClick(item.index, menuItem, (event) -> onMenuClick(event, menu, mat, item));
+        });
+        return menu.open(player);
     }
 
-    // API
-
-    public InventoryContext openSellInventory(Player player, String title, int size) {
-        if (title.length() > 32) title = title.substring(0, 32);
-        Inventory inventory = getServer().createInventory(null, size, title);
-        InventoryView view = player.openInventory(inventory);
-        InventoryContext context = new InventoryContext(inventory, view, 0.0);
-        openInventories.put(player.getUniqueId(), context);
-        return context;
-    }
-
-    // Event Handlers
-
-    @EventHandler(ignoreCancelled = false, priority = EventPriority.LOW)
-    public void onInventoryClose(InventoryCloseEvent event) {
-        // Preamble. Return fast.
-        if (!(event.getPlayer() instanceof Player)) return;
-        final Player player = (Player)event.getPlayer();
-        final UUID playerId = player.getUniqueId();
-        final InventoryContext context = openInventories.get(playerId);
-        if (context == null) return;
-        // Remove and check
-        openInventories.remove(playerId);
-        if (!context.inventory.equals(event.getView().getTopInventory())) {
-            getLogger().warning("Inventory of " + player.getName() + "does not match!");
+    void onMenuClick(InventoryClickEvent event, ChestMenu menu, Material mat, ItemCache cache) {
+        if (cache.price <= 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
+        Player player = (Player)event.getWhoClicked();
+        boolean left = event.isLeftClick();
+        boolean right = event.isRightClick();
+        boolean shift = event.isShiftClick();
+        final int amount;
+        if (left && !shift) {
+            amount = 1;
+        } else if (right && !shift) {
+            amount = Math.min(mat.getMaxStackSize(), cache.amount);
+        } else if (shift) {
+            amount = cache.amount;
+        } else {
+            player.playSound(player.getEyeLocation(), Sound.UI_BUTTON_CLICK, SoundCategory.MASTER, 0.5f, 0.75f);
             return;
         }
-        if (context.closedByPlugin) return;
-        // Logic starts here
-        double price = getSellingPrice(context.inventory);
-        int total = 0;
-        if (price > 0) {
-            Set<SQLItem> dirty = new HashSet<>();
-            Map<Material, Integer> totals = new HashMap<>();
-            for (ItemStack item: context.inventory) {
-                if (item == null || item.getType() == Material.AIR) continue;
-                Material mat = item.getType();
-                SQLItem row = itemPrices.get(mat);
-                if (row == null) continue; // Should never happen
-                dirty.add(row);
-                row.setStorage(row.getStorage() + item.getAmount());
-                total += item.getAmount();
-                Integer amount = totals.get(mat);
-                if (amount == null) amount = 0;
-                amount += item.getAmount();
-                totals.put(mat, amount);
-            }
-            for (SQLItem item: dirty) {
-                double newPrice = calculateItemPrice(item, this.lastUpdateTime);
-                item.setPrice(newPrice);
-            }
-            database.saveAsync(dirty, null, "storage", "price");
-            GenericEvents.givePlayerMoney(playerId, price, this, total + " items sold");
-            player.sendMessage("" + ChatColor.GREEN + total + " Items sold for " + GenericEvents.formatMoney(price) + ".");
-            StringBuilder sb = new StringBuilder(player.getName()).append(" sold");
-            for (Map.Entry<Material, Integer> entry: totals.entrySet()) {
-                sb.append(" ").append(entry.getValue()).append("x").append(entry.getKey().name().toLowerCase());
-            }
-            sb.append(" for ").append(GenericEvents.formatMoney(price)).append(".");
-            getLogger().info(sb.toString());
-        } else {
-            for (ItemStack item: context.inventory) {
-                if (item == null || item.getType() == Material.AIR) continue;
-                for (ItemStack drop: player.getInventory().addItem(item).values()) {
-                    player.getWorld().dropItem(player.getEyeLocation(), drop);
-                }
-            }
+        menu.setValid(false);
+        sellItems(player, mat, amount, cache.price);
+        getServer().getScheduler().runTask(this, () -> openShopChest(player));
+    }
+
+    void sellItems(Player player, Material mat, int amount, double pricePerItem) {
+        if (pricePerItem <= 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
+        int itemsRemain = amount;
+        Inventory inv = player.getInventory();
+        ItemStack proto = new ItemStack(mat);
+        for (int i = 4 * 9 - 1; i >= 0 && itemsRemain > 0; i -= 1) {
+            int playerIndex = i < 27 ? i + 9 : i - 27;
+            ItemStack item = inv.getItem(playerIndex);
+            if (item == null || item.getType() != mat) continue;
+            if (!item.isSimilar(proto)) continue;
+            int itemAmount = item.getAmount();
+            int sold = Math.min(itemAmount, itemsRemain);
+            item.setAmount(itemAmount - sold);
+            itemsRemain -= sold;
         }
-    }
-
-    @EventHandler(ignoreCancelled = false, priority = EventPriority.LOW)
-    public void onInventoryClick(InventoryClickEvent event) {
-        // Preamble. Return fast.
-        if (!(event.getWhoClicked() instanceof Player)) return;
-        final Player player = (Player)event.getWhoClicked();
-        final UUID playerId = player.getUniqueId();
-        final InventoryContext context = openInventories.get(playerId);
-        if (context == null) return;
-        if (context.updatePending) return;
-        context.updatePending = true;
-        // Logic
-        getServer().getScheduler().runTask(this, () -> updateSellInventory(player, context));
-    }
-
-    @EventHandler(ignoreCancelled = false, priority = EventPriority.LOW)
-    public void onInventoryDrag(InventoryDragEvent event) {
-        // Preamble. Return fast.
-        if (!(event.getWhoClicked() instanceof Player)) return;
-        final Player player = (Player)event.getWhoClicked();
-        final UUID playerId = player.getUniqueId();
-        final InventoryContext context = openInventories.get(playerId);
-        if (context == null) return;
-        if (context.updatePending) return;
-        context.updatePending = true;
-        // Logic
-        getServer().getScheduler().runTask(this, () -> updateSellInventory(player, context));
-    }
-
-    /**
-     * Called by the above listeners to update an item sell inventory
-     * once the contents have been modified.
-     * This is done on a new tick because closing inventories from
-     * within related events is illegal.
-     */
-    private void updateSellInventory(final Player player, final InventoryContext context) {
-        if (!context.valid) return;
-        context.updatePending = false;
-        ItemStack cursor = context.view.getCursor();
-        if (cursor != null && cursor.getType() != Material.AIR) return;
-        double price = getSellingPrice(context.inventory);
-        if (Math.abs(context.price - price) < 0.01) return;
-        String priceStr;
-        if (price < 0) {
-            priceStr = ChatColor.DARK_RED + "INVALID ITEM";
-        } else {
-            priceStr = ChatColor.DARK_GREEN + GenericEvents.formatMoney(price);
+        int totalSold = amount - itemsRemain;
+        double money = (double)totalSold * pricePerItem;
+        String nice = niceEnum(mat.name());
+        GenericEvents.givePlayerMoney(player.getUniqueId(), money, this, "Sold " + totalSold + "x" + nice);
+        getLogger().info(player.getName() + " (" + player.getUniqueId() + ") sold " + totalSold + "x" + mat.name() + " for " + fmt(money) + ".");
+        final String rs = "" + ChatColor.RESET;
+        final String hl = "" + ChatColor.GREEN;
+        final String pr = "" + ChatColor.GREEN + ChatColor.UNDERLINE;
+        if (this.sqlDatabase != null) {
+            this.sqlDatabase.insertAsync(new SQLLog(player.getUniqueId(), mat, amount, money), null);
         }
-        if (priceStr.length() > 32) priceStr = priceStr.substring(0, 32);
-        int size = context.inventory.getSize();
-        Inventory newInventory = getServer().createInventory(null, size, priceStr);
-        for (int i = 0; i < size; i += 1) {
-            newInventory.setItem(i, context.inventory.getItem(i));
-            context.inventory.setItem(i, null);
-        }
-        context.closedByPlugin = true; // Mark context for the event to ignore this
-        final UUID playerId = player.getUniqueId();
-        InventoryView newView = player.openInventory(newInventory); // Implies Close
-        InventoryContext newContext = new InventoryContext(newInventory, newView, price);
-        openInventories.put(player.getUniqueId(), newContext);
+        player.sendMessage(rs + "Sold " + hl + totalSold + rs + "x" + hl + nice + rs + " for " + pr
+                           + GenericEvents.formatMoney(money) + rs + ".");
+        player.playSound(player.getEyeLocation(), Sound.BLOCK_NOTE_BLOCK_GUITAR, SoundCategory.MASTER, 0.5f, 1.25f);
     }
 
-    String fmt(double num) {
-        return String.format("%.02f", num);
+    // Util
+
+    static String niceEnum(String name) {
+        return Arrays.stream(name.split("_"))
+            .map((s) -> s.substring(0, 1) + s.substring(1).toLowerCase())
+            .collect(Collectors.joining(" "));
+    }
+
+    static String fmt(double money) {
+        return String.format("%.02f", money);
     }
 }

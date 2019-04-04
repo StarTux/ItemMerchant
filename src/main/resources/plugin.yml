@@ -1,0 +1,36 @@
+name: ItemMerchant
+description: Sell or buy items to or from virtual merchants.
+author: StarTux
+website: https://cavetale.com
+version: '0.1'
+api-version: '1.13'
+main: com.cavetale.itemmerchant.ItemMerchantPlugin
+depend: [GenericEvents]
+commands:
+  sell:
+    aliases: []
+    description: Open sell shop.
+    permission: itemmerchant.sell
+    usage: |-
+      /sell
+  itemmerchant:
+    aliases: [im]
+    description: Admin interface
+    permission: itemmerchant.admin
+    usage: |-
+      /im set <item> <price> - Update price.
+      /im get <item> - Look up price.
+      /im list <pattern> - Look up prices.
+      /im rank <what> <filters> - Rank sales.
+        what: items|players
+        filters: days <number>
+                 item <name>
+                 player <name>
+permissions:
+  itemmerchant.sell:
+    description: Use /sell
+    default: op
+  itemmerchant.admin:
+    description: Use /itemmerchant
+    default: op
+

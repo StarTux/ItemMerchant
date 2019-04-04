@@ -1,3 +1,1 @@
-RandomFactor: 0.25
-RecoveryFactor: 0.001 # 1/1000 Per player
-UpdateInterval: 5 # In minutes
+logging: true
