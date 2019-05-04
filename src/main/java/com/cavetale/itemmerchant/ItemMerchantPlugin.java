@@ -190,7 +190,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
     }
 
     void onMenuClick(InventoryClickEvent event, ChestMenu menu, Material mat, ItemCache cache) {
-        if (cache.price <= 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
+        if (cache.price < 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
         Player player = (Player)event.getWhoClicked();
         boolean left = event.isLeftClick();
         boolean right = event.isRightClick();
@@ -212,7 +212,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
     }
 
     void sellItems(Player player, Material mat, int amount, double pricePerItem) {
-        if (pricePerItem <= 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
+        if (pricePerItem < 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
         int itemsRemain = amount;
         Inventory inv = player.getInventory();
         ItemStack proto = new ItemStack(mat);
