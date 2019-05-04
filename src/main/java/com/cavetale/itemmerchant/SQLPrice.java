@@ -21,7 +21,6 @@ public final class SQLPrice {
 
     SQLPrice(String material, double price) {
         this.material = Objects.requireNonNull(material);
-        if (price < 0.01) throw new IllegalArgumentException("price must be significant");
         this.price = price;
     }
 

@@ -34,4 +34,3 @@ permissions:
   itemmerchant.admin:
     description: Use /itemmerchant
     default: op
-
