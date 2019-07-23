@@ -82,8 +82,13 @@ public final class ItemMerchantPlugin extends JavaPlugin {
     void loadMaterialPrices() {
         this.materialPrices = new EnumMap<>(Material.class);
         this.sqlDatabase.find(SQLPrice.class).findList().forEach(row -> {
-                Material mat = Material.valueOf(row.getMaterial().toUpperCase());
-                this.materialPrices.put(mat, row.getPrice());
+                String key = row.getMaterial();
+                try {
+                    Material mat = Material.valueOf(key.toUpperCase());
+                    this.materialPrices.put(mat, row.getPrice());
+                } catch (IllegalArgumentException iae) {
+                    getLogger().warning("Invalid material: " + key);
+                }
             });
     }
 
