@@ -1,11 +1,11 @@
+main: com.cavetale.itemmerchant.ItemMerchantPlugin
 name: ItemMerchant
 description: Sell or buy items to or from virtual merchants.
 author: StarTux
 website: https://cavetale.com
 version: '0.1'
 api-version: '1.13'
-main: com.cavetale.itemmerchant.ItemMerchantPlugin
-depend: [GenericEvents]
+depend: [SQL, GenericEvents]
 commands:
   sell:
     aliases: []
