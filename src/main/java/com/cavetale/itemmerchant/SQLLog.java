@@ -25,7 +25,7 @@ public final class SQLLog {
 
     public SQLLog() { }
 
-    SQLLog(UUID player, String material, int amount, double price) {
+    SQLLog(final UUID player, final String material, final int amount, final double price) {
         this.player = Objects.requireNonNull(player);
         this.material = Objects.requireNonNull(material);
         if (amount <= 0) throw new IllegalArgumentException("amount must be positive");
@@ -35,7 +35,7 @@ public final class SQLLog {
         this.time = new Date();
     }
 
-    SQLLog(UUID player, Material material, int amount, double price) {
+    SQLLog(final UUID player, final Material material, final int amount, final double price) {
         this(player, material.name().toLowerCase(), amount, price);
     }
 }

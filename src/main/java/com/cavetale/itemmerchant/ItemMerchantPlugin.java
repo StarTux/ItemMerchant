@@ -67,7 +67,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
             sender.sendMessage("Player expected!");
             return true;
         }
-        Player player = (Player)sender;
+        Player player = (Player) sender;
         if (args.length != 0) {
             player.sendMessage(ChatColor.RED + "Usage: /sell");
             return true;
@@ -179,13 +179,13 @@ public final class ItemMerchantPlugin extends JavaPlugin {
                 lore.add(vl);
                 lore.add(cl + "Right click " + ChatColor.DARK_PURPLE + "to sell one stack");
                 lore.add("(" + amount + " items) for "
-                         + pr + GenericEvents.formatMoney(item.price * (double)amount) + pu + ".");
+                         + pr + GenericEvents.formatMoney(item.price * (double) amount) + pu + ".");
             }
             if (item.amount > 1) {
                 lore.add(vl);
                 lore.add(cl + "Shift click " + ChatColor.DARK_PURPLE + "to sell all");
                 lore.add("(" + item.amount + " items) for "
-                         + pr + GenericEvents.formatMoney(item.price * (double)item.amount) + pu + ".");
+                         + pr + GenericEvents.formatMoney(item.price * (double) item.amount) + pu + ".");
             }
             meta.setLore(lore);
             menuItem.setItemMeta(meta);
@@ -196,7 +196,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
 
     void onMenuClick(InventoryClickEvent event, ChestMenu menu, Material mat, ItemCache cache) {
         if (cache.price < 0.01) throw new IllegalArgumentException("Cannot sell " + mat + " for less than 0.01!");
-        Player player = (Player)event.getWhoClicked();
+        Player player = (Player) event.getWhoClicked();
         boolean left = event.isLeftClick();
         boolean right = event.isRightClick();
         boolean shift = event.isShiftClick();
@@ -232,7 +232,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
             itemsRemain -= sold;
         }
         int totalSold = amount - itemsRemain;
-        double money = (double)totalSold * pricePerItem;
+        double money = (double) totalSold * pricePerItem;
         String nice = niceEnum(mat.name());
         GenericEvents.givePlayerMoney(player.getUniqueId(), money, this, "Sold " + totalSold + "x" + nice);
         getLogger().info(player.getName() + " sold " + totalSold + "x" + mat.name() + " for " + fmt(money) + ".");

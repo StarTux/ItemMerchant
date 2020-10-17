@@ -19,12 +19,12 @@ public final class SQLPrice {
 
     public SQLPrice() { }
 
-    SQLPrice(String material, double price) {
+    SQLPrice(final String material, final double price) {
         this.material = Objects.requireNonNull(material);
         this.price = price;
     }
 
-    SQLPrice(Material material, double price) {
+    SQLPrice(final Material material, final double price) {
         this(material.name().toLowerCase(), price);
     }
 }

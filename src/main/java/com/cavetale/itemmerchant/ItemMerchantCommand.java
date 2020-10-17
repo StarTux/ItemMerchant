@@ -26,7 +26,7 @@ final class ItemMerchantCommand implements TabExecutor {
     private static final List<String> COMMANDS = Arrays.asList("get", "set", "list", "rank", "import", "export");
 
     static class CommandException extends Exception {
-        CommandException(String msg) {
+        CommandException(final String msg) {
             super(msg);
         }
     }
@@ -48,11 +48,11 @@ final class ItemMerchantCommand implements TabExecutor {
         int amount = 0;
         double money = 0;
 
-        SearchCache(UUID uuid) {
+        SearchCache(final UUID uuid) {
             this.uuid = uuid;
         }
 
-        SearchCache(Material mat) {
+        SearchCache(final Material mat) {
             this.mat = mat;
         }
     }
@@ -105,7 +105,7 @@ final class ItemMerchantCommand implements TabExecutor {
                     } catch (NumberFormatException nfe) {
                         throw new CommandException("Invalid days: " + n);
                     }
-                    query.gt("time", new Date(System.currentTimeMillis() - (long)days * 24 * 60 * 60 * 1000));
+                    query.gt("time", new Date(System.currentTimeMillis() - (long) days * 24 * 60 * 60 * 1000));
                     break;
                 }
                 case "item": {
