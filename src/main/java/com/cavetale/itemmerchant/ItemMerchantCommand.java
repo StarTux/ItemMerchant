@@ -1,6 +1,6 @@
 package com.cavetale.itemmerchant;
 
-import com.winthier.generic_events.GenericEvents;
+import com.winthier.playercache.PlayerCache;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Date;
@@ -115,7 +115,7 @@ final class ItemMerchantCommand implements TabExecutor {
                 }
                 case "player": {
                     String n = iter.next();
-                    UUID uuid = GenericEvents.cachedPlayerUuid(n);
+                    UUID uuid = PlayerCache.uuidForName(n);
                     if (uuid == null) throw new CommandException("Player not found: " + n);
                     query.eq("player", uuid);
                     break;
@@ -179,7 +179,7 @@ final class ItemMerchantCommand implements TabExecutor {
                     sender.sendMessage("" + (i + 1) + ")"
                                        + " x" + rank.amount
                                        + " $" + this.plugin.fmt(rank.money)
-                                       + " " + GenericEvents.cachedPlayerName(rank.uuid));
+                                       + " " + PlayerCache.nameForUuid(rank.uuid));
                 }
                 break;
             }

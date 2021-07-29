@@ -1,6 +1,6 @@
 package com.cavetale.itemmerchant;
 
-import com.winthier.generic_events.GenericEvents;
+import com.cavetale.money.Money;
 import com.winthier.sql.SQLDatabase;
 import java.io.File;
 import java.io.IOException;
@@ -172,20 +172,20 @@ public final class ItemMerchantPlugin extends JavaPlugin {
             ItemMeta meta = menuItem.getItemMeta();
             List<String> lore = new ArrayList<>();
             lore.add(cl + "Left click " + ChatColor.DARK_PURPLE + "to sell one item");
-            lore.add("for " + pr + GenericEvents.formatMoney(item.price) + pu + ".");
+            lore.add("for " + pr + Money.format(item.price) + pu + ".");
             int stack = mat.getMaxStackSize();
             if (stack > 1 && item.amount > 1) {
                 int amount = Math.min(stack, item.amount);
                 lore.add(vl);
                 lore.add(cl + "Right click " + ChatColor.DARK_PURPLE + "to sell one stack");
                 lore.add("(" + amount + " items) for "
-                         + pr + GenericEvents.formatMoney(item.price * (double) amount) + pu + ".");
+                         + pr + Money.format(item.price * (double) amount) + pu + ".");
             }
             if (item.amount > 1) {
                 lore.add(vl);
                 lore.add(cl + "Shift click " + ChatColor.DARK_PURPLE + "to sell all");
                 lore.add("(" + item.amount + " items) for "
-                         + pr + GenericEvents.formatMoney(item.price * (double) item.amount) + pu + ".");
+                         + pr + Money.format(item.price * (double) item.amount) + pu + ".");
             }
             meta.setLore(lore);
             menuItem.setItemMeta(meta);
@@ -234,7 +234,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         int totalSold = amount - itemsRemain;
         double money = (double) totalSold * pricePerItem;
         String nice = niceEnum(mat.name());
-        GenericEvents.givePlayerMoney(player.getUniqueId(), money, this, "Sold " + totalSold + "x" + nice);
+        Money.give(player.getUniqueId(), money, this, "Sold " + totalSold + "x" + nice);
         getLogger().info(player.getName() + " sold " + totalSold + "x" + mat.name() + " for " + fmt(money) + ".");
         final String rs = "" + ChatColor.RESET;
         final String hl = "" + ChatColor.GREEN;
@@ -243,7 +243,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
             this.sqlDatabase.insertAsync(new SQLLog(player.getUniqueId(), mat, amount, money), null);
         }
         player.sendMessage(rs + "Sold " + hl + totalSold + rs + "x" + hl + nice + rs + " for " + pr
-                           + GenericEvents.formatMoney(money) + rs + ".");
+                           + Money.format(money) + rs + ".");
         player.playSound(player.getEyeLocation(), Sound.BLOCK_NOTE_BLOCK_GUITAR, SoundCategory.MASTER, 0.5f, 1.25f);
     }
 
