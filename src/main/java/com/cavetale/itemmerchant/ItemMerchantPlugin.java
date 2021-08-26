@@ -1,5 +1,7 @@
 package com.cavetale.itemmerchant;
 
+import com.cavetale.core.event.player.PluginPlayerEvent.Detail;
+import com.cavetale.core.event.player.PluginPlayerEvent;
 import com.cavetale.money.Money;
 import com.winthier.sql.SQLDatabase;
 import java.io.File;
@@ -14,6 +16,9 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.Sound;
@@ -145,7 +150,7 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         Inventory playerInv = player.getInventory();
         Map<Material, ItemCache> items = new EnumMap<>(Material.class);
         ChestMenu menu = new ChestMenu();
-        menu.createInventory(4 * 9, "" + ChatColor.DARK_PURPLE + ChatColor.BOLD + "Sell Items");
+        menu.createInventory(4 * 9, Component.text("Sell Items", NamedTextColor.DARK_PURPLE, TextDecoration.BOLD));
         for (int menuIndex = 0; menuIndex < 4 * 9; menuIndex += 1) {
             int playerIndex = menuIndex < 27 ? menuIndex + 9 : menuIndex - 27;
             ItemStack item = playerInv.getItem(playerIndex);
@@ -166,31 +171,38 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         final String pr = "" + ChatColor.GREEN + ChatColor.ITALIC + ChatColor.UNDERLINE;
         final String vl = " " + ChatColor.LIGHT_PURPLE + ChatColor.STRIKETHROUGH
             + "                                 ";
-        items.forEach((mat, item) -> {
-            if (item.price < 0.01) return;
+        int totalItemCount = 0;
+        for (Map.Entry<Material, ItemCache> entry : items.entrySet()) {
+            Material mat = entry.getKey();
+            ItemCache item = entry.getValue();
+            if (item.price < 0.01) continue;
             ItemStack menuItem = new ItemStack(mat);
             ItemMeta meta = menuItem.getItemMeta();
-            List<String> lore = new ArrayList<>();
-            lore.add(cl + "Left click " + ChatColor.DARK_PURPLE + "to sell one item");
-            lore.add("for " + pr + Money.format(item.price) + pu + ".");
+            List<Component> lore = new ArrayList<>();
+            lore.add(Component.text(cl + "Left click " + ChatColor.DARK_PURPLE + "to sell one item"));
+            lore.add(Component.text("for " + pr + Money.format(item.price) + pu + "."));
             int stack = mat.getMaxStackSize();
             if (stack > 1 && item.amount > 1) {
                 int amount = Math.min(stack, item.amount);
-                lore.add(vl);
-                lore.add(cl + "Right click " + ChatColor.DARK_PURPLE + "to sell one stack");
-                lore.add("(" + amount + " items) for "
-                         + pr + Money.format(item.price * (double) amount) + pu + ".");
+                lore.add(Component.text(vl));
+                lore.add(Component.text(cl + "Right click " + ChatColor.DARK_PURPLE + "to sell one stack"));
+                lore.add(Component.text("(" + amount + " items) for "
+                                        + pr + Money.format(item.price * (double) amount) + pu + "."));
             }
             if (item.amount > 1) {
-                lore.add(vl);
-                lore.add(cl + "Shift click " + ChatColor.DARK_PURPLE + "to sell all");
-                lore.add("(" + item.amount + " items) for "
-                         + pr + Money.format(item.price * (double) item.amount) + pu + ".");
+                lore.add(Component.text(vl));
+                lore.add(Component.text(cl + "Shift click " + ChatColor.DARK_PURPLE + "to sell all"));
+                lore.add(Component.text("(" + item.amount + " items) for "
+                                        + pr + Money.format(item.price * (double) item.amount) + pu + "."));
             }
-            meta.setLore(lore);
+            meta.lore(lore);
             menuItem.setItemMeta(meta);
             menu.setClick(item.index, menuItem, (event) -> onMenuClick(event, menu, mat, item));
-        });
+            totalItemCount += 1;
+        }
+        if (totalItemCount == 0) {
+            player.sendMessage(Component.text("You have no items to sell!", NamedTextColor.RED));
+        }
         return menu.open(player);
     }
 
@@ -245,6 +257,12 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         player.sendMessage(rs + "Sold " + hl + totalSold + rs + "x" + hl + nice + rs + " for " + pr
                            + Money.format(money) + rs + ".");
         player.playSound(player.getEyeLocation(), Sound.BLOCK_NOTE_BLOCK_GUITAR, SoundCategory.MASTER, 0.5f, 1.25f);
+        PluginPlayerEvent.Name.SELL_ITEM.ultimate(this, player)
+            .detail(Detail.MATERIAL, mat)
+            .detail(Detail.ITEM, proto)
+            .detail(Detail.COUNT, totalSold)
+            .detail(Detail.MONEY, money)
+            .call();
     }
 
     // Util

@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -26,7 +27,7 @@ public final class ChestMenu implements InventoryHolder {
 
     // Setup
 
-    public Inventory createInventory(int size, String title) {
+    public Inventory createInventory(int size, Component title) {
         this.inventory = Bukkit.getServer().createInventory(this, size, title);
         return this.inventory;
     }
