@@ -1,5 +1,6 @@
 package com.cavetale.itemmerchant;
 
+import com.winthier.sql.SQLRow;
 import java.util.Date;
 import java.util.Objects;
 import java.util.UUID;
@@ -15,7 +16,7 @@ import org.bukkit.Material;
        indexes = {@Index(columnList = "player"),
                   @Index(columnList = "material"),
                   @Index(columnList = "time")})
-public final class SQLLog {
+public final class SQLLog implements SQLRow {
     @Id Integer id;
     @Column(nullable = false) UUID player;
     @Column(nullable = false, length = 64) String material;

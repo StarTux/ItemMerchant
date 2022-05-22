@@ -14,11 +14,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import lombok.val;
-import net.md_5.bungee.api.ChatColor;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabExecutor;
+import static net.kyori.adventure.text.Component.text;
+import static net.kyori.adventure.text.format.NamedTextColor.*;
 
 @RequiredArgsConstructor
 final class ItemMerchantCommand implements TabExecutor {
@@ -37,7 +38,7 @@ final class ItemMerchantCommand implements TabExecutor {
         try {
             return onCommand(sender, args[0], Arrays.copyOfRange(args, 1, args.length));
         } catch (CommandException e) {
-            sender.sendMessage(ChatColor.RED + e.getMessage());
+            sender.sendMessage(text(e.getMessage(), RED));
             return true;
         }
     }

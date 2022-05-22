@@ -257,12 +257,12 @@ public final class ItemMerchantPlugin extends JavaPlugin {
         player.sendMessage(rs + "Sold " + hl + totalSold + rs + "x" + hl + nice + rs + " for " + pr
                            + Money.format(money) + rs + ".");
         player.playSound(player.getEyeLocation(), Sound.BLOCK_NOTE_BLOCK_GUITAR, SoundCategory.MASTER, 0.5f, 1.25f);
-        PluginPlayerEvent.Name.SELL_ITEM.ultimate(this, player)
+        PluginPlayerEvent.Name.SELL_ITEM.make(this, player)
             .detail(Detail.MATERIAL, mat)
             .detail(Detail.ITEM, proto)
             .detail(Detail.COUNT, totalSold)
             .detail(Detail.MONEY, money)
-            .call();
+            .callEvent();
     }
 
     // Util

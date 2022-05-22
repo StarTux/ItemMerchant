@@ -1,5 +1,6 @@
 package com.cavetale.itemmerchant;
 
+import com.winthier.sql.SQLRow;
 import java.util.Objects;
 import javax.persistence.Column;
 import javax.persistence.Id;
@@ -12,7 +13,7 @@ import org.bukkit.Material;
 @Table(name = "prices",
        uniqueConstraints = @UniqueConstraint(name = "material",
                                              columnNames = {"material"}))
-public final class SQLPrice {
+public final class SQLPrice implements SQLRow {
     @Id Integer id;
     @Column(nullable = false, length = 64) String material;
     @Column(nullable = false) Double price;
